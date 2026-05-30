@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VeckoFynd">
+<title>VeckoFynd – Farsta</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Nunito', sans-serif; background: #f4f6fb; min-height: 100vh; max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
+  button { font-family: 'Nunito', sans-serif; cursor: pointer; }
+  input, select { font-family: 'Nunito', sans-serif; }
+  ::-webkit-scrollbar { display: none; }
+
+  /* Header */
+  #header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%); padding: 20px 16px 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  #header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  #app-title { color: #ffd700; font-weight: 900; font-size: 22px; letter-spacing: -0.5px; }
+  #app-subtitle { color: rgba(255,255,255,0.6); font-size: 12px; font-weight: 600; }
+  #list-btn { border: none; border-radius: 12px; padding: 8px 14px; font-weight: 800; font-size: 15px; background: rgba(255,255,255,0.15); color: white; }
+  #list-btn.has-items { background: #ffd700; color: #1a1a2e; }
+  #search { width: 100%; padding: 10px 14px; border-radius: 12px; border: none; background: rgba(255,255,255,0.12); color: white; font-size: 14px; outline: none; }
+  #search::placeholder { color: rgba(255,255,255,0.5); }
+
+  /* Nav */
+  #nav { display: flex; background: #1a1a2e; padding: 0 8px; gap: 4px; }
+  .nav-btn { flex: 1; padding: 10px 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-weight: 800; font-size: 12px; border-bottom: 3px solid transparent; }
+  .nav-btn.active { color: #ffd700; border-bottom: 3px solid #ffd700; }
+
+  /* Scrollable rows */
+  .scroll-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+
+  /* Top deal cards */
+  .top-card { flex: 0 0 148px; background: white; border-radius: 16px; padding: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .top-card .discount-badge { background: #ff3b3b; color: white; font-weight: 900; font-size: 11px; border-radius: 8px; padding: 2px 6px; }
+  .top-card .product-name { font-weight: 800; font-size: 13px; color: #1a1a2e; line-height: 1.2; margin-bottom: 2px; }
+  .top-card .product-detail { font-size: 11px; color: #888; margin-bottom: 6px; }
+  .top-card .sale-price { font-weight: 900; font-size: 17px; }
+  .top-card .orig-price { font-size: 11px; color: #bbb; text-decoration: line-through; }
+  .top-card .store-label { font-size: 10px; font-weight: 800; margin-top: 4px; }
+
+  /* Filter pills */
+  .pill { flex: 0 0 auto; padding: 6px 13px; border-radius: 20px; border: none; background: #e8ecf3; color: #555; font-weight: 700; font-size: 12px; }
+  .pill.active { background: #1a1a2e; color: white; }
+  .store-pill { flex: 0 0 auto; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 11px; border: 2px solid #ddd; background: white; color: #aaa; }
+  .store-pill.active { }
+
+  /* Sort buttons */
+  .sort-btn { padding: 4px 10px; border-radius: 12px; border: none; background: #e8ecf3; color: #555; font-weight: 700; font-size: 11px; }
+  .sort-btn.active { background: #0f3460; color: white; }
+
+  /* Deal cards */
+  .deal-card { background: white; border-radius: 16px; padding: 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .deal-emoji { font-size: 32px; flex-shrink: 0; }
+  .deal-info { flex: 1; min-width: 0; }
+  .deal-name { font-weight: 800; font-size: 14px; color: #1a1a2e; }
+  .hot-badge { background: #ff3b3b; color: white; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 1px 5px; }
+  .deal-detail { font-size: 12px; color: #888; margin: 2px 0; }
+  .deal-prices { display: flex; align-items: center; gap: 8px; }
+  .deal-sale { font-weight: 900; font-size: 16px; }
+  .deal-orig { font-size: 12px; color: #bbb; text-decoration: line-through; }
+  .pct-badge { background: #ff3b3b; color: white; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 1px 6px; }
+  .deal-store { font-size: 11px; font-weight: 700; margin-top: 2px; }
+  .add-btn { border: none; border-radius: 12px; width: 36px; height: 36px; font-size: 17px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f0f4ff; }
+  .add-btn.in-list { background: #e8f5e9; }
+
+  /* Store cards */
+  .store-card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .store-link { display: block; margin-top: 10px; text-align: center; border-radius: 10px; padding: 8px; font-weight: 800; font-size: 13px; text-decoration: none; }
+
+  /* Shopping list */
+  .list-store-block { background: white; border-radius: 16px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .list-store-header { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
+  .cat-header { padding: 5px 14px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+  .list-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #f4f6fb; }
+  .remove-btn { background: #ffe5e5; border: none; border-radius: 8px; width: 28px; height: 28px; color: #cc0000; font-weight: 900; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .summary-box { background: linear-gradient(135deg, #1a1a2e, #0f3460); border-radius: 16px; padding: 16px; color: white; text-align: center; }
+  .copy-btn { margin-top: 14px; border: none; border-radius: 14px; padding: 11px 24px; font-weight: 800; font-size: 14px; width: 100%; transition: all 0.2s; background: #ffd700; color: #1a1a2e; }
+  .copy-btn.copied { background: #4caf50; color: white; }
+
+  /* Modal */
+  #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: none; align-items: flex-end; }
+  #modal-overlay.open { display: flex; }
+  #modal { background: white; border-radius: 24px 24px 0 0; padding: 20px; width: 100%; max-height: 85vh; overflow-y: auto; }
+  .form-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 2px solid #e8ecf3; font-size: 14px; outline: none; background: #f8faff; }
+  .form-label { font-size: 12px; font-weight: 700; color: #666; margin-bottom: 4px; display: block; }
+
+  /* Tip box */
+  .tip-box { background: #fff9e6; border-radius: 14px; padding: 12px; border: 1.5px solid #ffd700; font-size: 12px; color: #7a6000; font-weight: 700; line-height: 1.6; }
+
+  /* Section padding */
+  .view { padding: 12px 12px 0; }
+  .section-title { font-weight: 900; font-size: 15px; color: #1a1a2e; margin-bottom: 8px; }
+  .empty-state { text-align: center; padding: 48px 16px; color: #ccc; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div id="header-top">
+    <div>
+      <div id="app-title">🛒 VeckoFynd</div>
+      <div id="app-subtitle">Farsta-området · Vecka 22, 25 maj–1 juni</div>
+    </div>
+    <button id="list-btn" onclick="setView('list')">🧾 <span id="list-count"></span></button>
+  </div>
+  <input id="search" placeholder="🔍 Sök produkt..." oninput="render()">
+</div>
+
+<!-- Nav -->
+<div id="nav">
+  <button class="nav-btn active" id="nav-deals" onclick="setView('deals')">🏷️ Erbjudanden</button>
+  <button class="nav-btn" id="nav-stores" onclick="setView('stores')">🏪 Butiker</button>
+  <button class="nav-btn" id="nav-list" onclick="setView('list')">📋 Inköpslista</button>
+</div>
+
+<!-- Views -->
+<div id="view-deals" class="view"></div>
+<div id="view-stores" class="view" style="display:none"></div>
+<div id="view-list" style="padding:12px;display:none"></div>
+
+<!-- Add deal modal -->
+<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div style="font-weight:900;font-size:18px;color:#1a1a2e;margin-bottom:16px">✏️ Lägg till erbjudande</div>
+    <div style="margin-bottom:12px"><label class="form-label">Butik</label>
+      <select id="f-store" class="form-input"></select></div>
+    <div style="margin-bottom:12px"><label class="form-label">Produkt</label>
+      <input id="f-product" class="form-input" placeholder="T.ex. Fläskfilé"></div>
+    <div style="margin-bottom:12px"><label class="form-label">Detaljer</label>
+      <input id="f-detail" class="form-input" placeholder="T.ex. Per kg, 800g förp"></div>
+    <div style="margin-bottom:12px"><label class="form-label">Kategori</label>
+      <select id="f-cat" class="form-input"></select></div>
+    <div style="margin-bottom:12px"><label class="form-label">Rea-pris (kr)</label>
+      <input id="f-price" class="form-input" type="number" placeholder="79"></div>
+    <div style="margin-bottom:12px"><label class="form-label">Ordinarie pris (kr)</label>
+      <input id="f-orig" class="form-input" type="number" placeholder="129"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="closeModal()" style="flex:1;padding:12px;background:#eee;border:none;border-radius:14px;font-weight:700;font-size:14px">Avbryt</button>
+      <button onclick="addDeal()" style="flex:2;padding:12px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;border:none;border-radius:14px;font-weight:800;font-size:14px">✅ Lägg till</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORES = [
+  { id:"ica",       name:"ICA Kvantum Farsta",      color:"#D22B2B", logo:"🔴", address:"Störöplan 2, Farsta",         distance:"0.3 km", hours:"07–22", url:"https://www.ica.se/erbjudanden/ica-kvantum-farsta-1003412/" },
+  { id:"hemkop",    name:"Hemköp Farsta",            color:"#007A3D", logo:"🟢", address:"Farstavägen 26-28, Farsta",   distance:"0.4 km", hours:"07–22", url:"https://www.hemkop.se/erbjudanden/4799" },
+  { id:"coop",      name:"Coop Farsta",              color:"#00529B", logo:"🔵", address:"Farstaplan 21, Farsta",       distance:"0.5 km", hours:"07–22", url:"https://www.coop.se/butiker-erbjudanden/coop/coop-farsta/" },
+  { id:"matdax",    name:"MatDax Hökarängen",        color:"#FF6B00", logo:"🟠", address:"Pepparvägen 5, Hökarängen",   distance:"1.8 km", hours:"07–22", url:"https://www.matdax.se/" },
+  { id:"willys",    name:"Willys Skörndal",          color:"#E4002B", logo:"🟥", address:"Sköndalsvägen 7, Skörndal",  distance:"2.5 km", hours:"07–21", url:"https://www.willys.se/erbjudanden" },
+  { id:"matvarlden",name:"Matvärlden Kungens Kurva", color:"#5B2D8E", logo:"🟣", address:"Modulvägen 6, Kungens Kurva",distance:"11 km",  hours:"07–22", url:"https://www.matvarlden.se/" },
+  { id:"icamaxi",  name:"ICA Maxi Haninge",          color:"#C41E3A", logo:"🔶", address:"Österport 4, Haninge",           distance:"14 km", hours:"07–22", url:"https://www.ica.se/erbjudanden/maxi-ica-stormarknad-haninge-1003777/" },
+  { id:"willyslanna", name:"Willys Länna",            color:"#B30022", logo:"🟫", address:"Nyckelvägen 4, Länna",          distance:"12 km", hours:"07–21", url:"https://www.willys.se/erbjudanden" },
+];
+
+const CATEGORIES = ["Allt","Kött","Kyckling","Fisk & Skaldjur","Pasta & Ris","Mejeri & Övrigt"];
+const CAT_EMOJI = { "Kött":"🥩","Kyckling":"🍗","Fisk & Skaldjur":"🐟","Pasta & Ris":"🍝","Mejeri & Övrigt":"🧀" };
+
+let deals = [
+  { id:1,  store:"ica",       product:"Färsk kycklinglårfilé",       detail:"Kronfågel, Sverige, ca 925g",   price:101,origPrice:169,unit:"förp",  category:"Kyckling",       emoji:"🍗",hot:true  },
+  { id:2,  store:"ica",       product:"Bregott",                     detail:"Arla, 500g",                    price:40, origPrice:68, unit:"st",    category:"Mejeri & Övrigt",emoji:"🧈",hot:true  },
+  { id:3,  store:"ica",       product:"Kryddmarinerade kycklingben",  detail:"Kronfågel, Sverige, 1,8 kg",   price:75, origPrice:110,unit:"förp",  category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:4,  store:"ica",       product:"Färsk fylld pasta",           detail:"Rana, 250g",                    price:35, origPrice:53, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:false },
+  { id:5,  store:"ica",       product:"Äggnudlar",                   detail:"ICA Asia, 250g – 2 för 12 kr", price:6,  origPrice:11, unit:"förp",  category:"Pasta & Ris",    emoji:"🍜",hot:true  },
+  { id:6,  store:"ica",       product:"Pommes Frites / Strips",      detail:"ICA, 1 kg – 2 för 45 kr",      price:23, origPrice:29, unit:"förp",  category:"Mejeri & Övrigt",emoji:"🍟",hot:false },
+  { id:7,  store:"ica",       product:"Västerbottensost®",           detail:"Norrmejerier, 450g",            price:85, origPrice:110,unit:"st",    category:"Mejeri & Övrigt",emoji:"🧀",hot:false },
+  { id:8,  store:"ica",       product:"Havregryn Eko",               detail:"ICA I love Eco, 750g",         price:15, origPrice:22, unit:"förp",  category:"Mejeri & Övrigt",emoji:"🌾",hot:false },
+  { id:9,  store:"hemkop",    product:"Nötfärs",                     detail:"Svensk blandfärs 15%, 800g",   price:65, origPrice:99, unit:"förp",  category:"Kött",           emoji:"🥩",hot:true  },
+  { id:10, store:"hemkop",    product:"Hel kyckling, kryddad",       detail:"Ca 1,3 kg",                    price:59, origPrice:89, unit:"st",    category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:11, store:"hemkop",    product:"Räkor med skal",              detail:"Frysta, 1 kg",                 price:99, origPrice:149,unit:"förp",  category:"Fisk & Skaldjur",emoji:"🦐",hot:true  },
+  { id:12, store:"hemkop",    product:"Torskfilé fryst",             detail:"400g",                         price:39, origPrice:59, unit:"förp",  category:"Fisk & Skaldjur",emoji:"🐟",hot:false },
+  { id:13, store:"hemkop",    product:"Laxfilé",                     detail:"Norsk, färsk, ca 500g",        price:69, origPrice:99, unit:"förp",  category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:14, store:"hemkop",    product:"Pasta Barilla",               detail:"500g, flera sorter",           price:12, origPrice:19, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:false },
+  { id:15, store:"coop",      product:"Färsk laxfilé",               detail:"Norge/Harbour, vakuum, ca 1kg",price:139,origPrice:199,unit:"kg",    category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:16, store:"coop",      product:"Kycklingklubbor",             detail:"1,5 kg förp",                  price:55, origPrice:79, unit:"förp",  category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:17, store:"coop",      product:"Spaghetti",                   detail:"Coop, 1 kg",                   price:9,  origPrice:15, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:true  },
+  { id:18, store:"coop",      product:"Lammkött fransyska",          detail:"Per kg",                       price:119,origPrice:179,unit:"kg",    category:"Kött",           emoji:"🥩",hot:false },
+  { id:19, store:"coop",      product:"Basmatiris",                  detail:"Uncle Ben's, 1 kg",            price:25, origPrice:39, unit:"förp",  category:"Pasta & Ris",    emoji:"🍚",hot:false },
+  { id:20, store:"matdax",    product:"Entrecôte",                   detail:"Importerad, per kg",           price:149,origPrice:249,unit:"kg",    category:"Kött",           emoji:"🥩",hot:true  },
+  { id:21, store:"matdax",    product:"Kycklingvingar kryddade",     detail:"1 kg",                         price:39, origPrice:69, unit:"förp",  category:"Kyckling",       emoji:"🍗",hot:true  },
+  { id:22, store:"matdax",    product:"Basmatiris 5 kg",             detail:"Storpack, säck",               price:89, origPrice:149,unit:"säck",  category:"Pasta & Ris",    emoji:"🍚",hot:true  },
+  { id:23, store:"matdax",    product:"Tilapia fryst",               detail:"Per kg",                       price:49, origPrice:79, unit:"kg",    category:"Fisk & Skaldjur",emoji:"🐠",hot:false },
+  { id:24, store:"matdax",    product:"Fläskkarré hel",              detail:"Per kg",                       price:59, origPrice:99, unit:"kg",    category:"Kött",           emoji:"🥩",hot:true  },
+  { id:25, store:"matdax",    product:"Pasta korta former",          detail:"Monte Castello, 500g",         price:10, origPrice:17, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:false },
+  { id:26, store:"willys",    product:"Laxfilé 4-pack",              detail:"Fryst, portionsbitar",         price:89, origPrice:149,unit:"förp",  category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:27, store:"willys",    product:"Prime Högrev",                detail:"Styckdetalj, per kg",          price:129,origPrice:219,unit:"kg",    category:"Kött",           emoji:"🥩",hot:true  },
+  { id:28, store:"willys",    product:"Kycklingnuggets",             detail:"Eldorado, fryst",              price:39, origPrice:65, unit:"förp",  category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:29, store:"willys",    product:"Kebab av karré",              detail:"Garant, fryst",                price:45, origPrice:75, unit:"förp",  category:"Kött",           emoji:"🥙",hot:false },
+  { id:30, store:"willys",    product:"Pasta korta former",          detail:"Monte Castello, 500g",         price:9,  origPrice:15, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:true  },
+  { id:31, store:"willys",    product:"Pastasås",                    detail:"Kelda, 400g",                  price:12, origPrice:22, unit:"förp",  category:"Pasta & Ris",    emoji:"🍝",hot:false },
+  { id:32, store:"willys",    product:"Prime Rökt skinka",           detail:"Charkskiva, 200g",             price:25, origPrice:45, unit:"förp",  category:"Mejeri & Övrigt",emoji:"🥓",hot:false },
+  { id:33, store:"willys",    product:"Hushållsost",                 detail:"Garant, 700g",                 price:49, origPrice:89, unit:"förp",  category:"Mejeri & Övrigt",emoji:"🧀",hot:true  },
+  { id:34, store:"matvarlden",product:"Oxfilé",                      detail:"Svensk, per kg",               price:249,origPrice:399,unit:"kg",    category:"Kött",           emoji:"🥩",hot:false },
+  { id:35, store:"matvarlden",product:"Hel lax skivad",              detail:"Ekologisk, per kg",            price:129,origPrice:189,unit:"kg",    category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:36, store:"matvarlden",product:"Kycklingbröst",               detail:"Per kg",                       price:89, origPrice:139,unit:"kg",    category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:37, store:"matvarlden",product:"Basmatiris 10 kg",            detail:"Storsäck, importerad",         price:149,origPrice:249,unit:"säck",  category:"Pasta & Ris",    emoji:"🍚",hot:true  },
+  // ── ICA Maxi Haninge (real v22 data) ──
+  { id:38, store:"icamaxi", product:"Färsk laxsida ASC",          detail:"ICA Gott liv/Pacific, ca 1200g",price:169,origPrice:225,unit:"kg",   category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:39, store:"icamaxi", product:"Färskost Philadelphia",       detail:"145-200g, 2 för 35 kr",        price:18, origPrice:27, unit:"st",   category:"Mejeri & Övrigt",emoji:"🧀",hot:true  },
+  { id:40, store:"icamaxi", product:"Fryst hamburgare",            detail:"ICA, 720g, max 2/hushåll",     price:70, origPrice:75, unit:"förp", category:"Kött",           emoji:"🍔",hot:false },
+  { id:41, store:"icamaxi", product:"Crème Fraiche",               detail:"Arla/Arla Köket, 2dl, 2 för 20 kr",price:10,origPrice:16,unit:"st",category:"Mejeri & Övrigt",emoji:"🥛",hot:true  },
+  { id:42, store:"icamaxi", product:"Pommes Frites/Strips",        detail:"Aviko, 600-750g, 2 för 42 kr", price:21, origPrice:25, unit:"förp", category:"Mejeri & Övrigt",emoji:"🍟",hot:false },
+  { id:43, store:"icamaxi", product:"Fetaost",                     detail:"ICA, 150g, 3 för 50 kr",       price:17, origPrice:21, unit:"st",   category:"Mejeri & Övrigt",emoji:"🧀",hot:true  },
+  { id:44, store:"icamaxi", product:"Mozzarella",                  detail:"Zeta, 100-125g, 2 för 33 kr",  price:17, origPrice:24, unit:"st",   category:"Mejeri & Övrigt",emoji:"🧀",hot:false },
+  { id:45, store:"icamaxi", product:"Prosciutto",                  detail:"ICA, 70-120g",                 price:30, origPrice:54, unit:"st",   category:"Kött",           emoji:"🥓",hot:true  },
+  { id:46, store:"icamaxi", product:"Jordgubbar i ask",            detail:"ICA, Spanien, 400g",           price:35, origPrice:55, unit:"st",   category:"Mejeri & Övrigt",emoji:"🍓",hot:false },
+  { id:47, store:"icamaxi", product:"Riven ost Kvibille",          detail:"Arla, 150g, 20 kr",            price:20, origPrice:29, unit:"st",   category:"Mejeri & Övrigt",emoji:"🧀",hot:false },
+  // ── Willys Länna (samma nationella v22 som Skörndal) ──
+  { id:48, store:"willyslanna", product:"Laxfilé 4-pack",          detail:"Fryst, portionsbitar",         price:89, origPrice:149,unit:"förp", category:"Fisk & Skaldjur",emoji:"🐟",hot:true  },
+  { id:49, store:"willyslanna", product:"Prime Högrev",            detail:"Styckdetalj, per kg",          price:129,origPrice:219,unit:"kg",   category:"Kött",           emoji:"🥩",hot:true  },
+  { id:50, store:"willyslanna", product:"Kycklingnuggets",         detail:"Eldorado, fryst",              price:39, origPrice:65, unit:"förp", category:"Kyckling",       emoji:"🍗",hot:false },
+  { id:51, store:"willyslanna", product:"Kebab av karré",          detail:"Garant, fryst",                price:45, origPrice:75, unit:"förp", category:"Kött",           emoji:"🥙",hot:false },
+  { id:52, store:"willyslanna", product:"Pasta korta former",      detail:"Monte Castello, 500g",         price:9,  origPrice:15, unit:"förp", category:"Pasta & Ris",    emoji:"🍝",hot:true  },
+  { id:53, store:"willyslanna", product:"Pastasås",                detail:"Kelda, 400g",                  price:12, origPrice:22, unit:"förp", category:"Pasta & Ris",    emoji:"🍝",hot:false },
+  { id:54, store:"willyslanna", product:"Prime Rökt skinka",       detail:"Charkskiva, 200g",             price:25, origPrice:45, unit:"förp", category:"Mejeri & Övrigt",emoji:"🥓",hot:false },
+  { id:55, store:"willyslanna", product:"Hushållsost",             detail:"Garant, 700g",                 price:49, origPrice:89, unit:"förp", category:"Mejeri & Övrigt",emoji:"🧀",hot:true  },
+];
+
+let shoppingList = [];
+let activeCategory = "Allt";
+let activeStores = STORES.map(s => s.id);
+let sortBy = "discount";
+let currentView = "deals";
+
+const pct = (p, o) => Math.round(((o-p)/o)*100);
+const getStore = id => STORES.find(s => s.id === id);
+
+function setView(v) {
+  currentView = v;
+  document.getElementById('view-deals').style.display = v==='deals' ? 'block' : 'none';
+  document.getElementById('view-stores').style.display = v==='stores' ? 'block' : 'none';
+  document.getElementById('view-list').style.display = v==='list' ? 'block' : 'none';
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-'+v).classList.add('active');
+  render();
+}
+
+function toggleStore(id) {
+  if (activeStores.includes(id)) activeStores = activeStores.filter(s => s !== id);
+  else activeStores.push(id);
+  render();
+}
+
+function toggleInList(id) {
+  const deal = deals.find(d => d.id === id);
+  if (!deal) return;
+  if (shoppingList.find(i => i.id === id)) shoppingList = shoppingList.filter(i => i.id !== id);
+  else shoppingList.push(deal);
+  render();
+}
+
+function removeFromList(id) {
+  shoppingList = shoppingList.filter(i => i.id !== id);
+  render();
+}
+
+function clearList() {
+  shoppingList = [];
+  render();
+}
+
+function copyToNotes() {
+  const today = new Date().toLocaleDateString('sv-SE');
+  const lines = [`🛒 Inköpslista – ${today}`, `Vecka 22, 25 maj–1 juni 2026`, ''];
+  STORES.filter(s => shoppingList.some(i => i.store === s.id)).forEach(store => {
+    const items = shoppingList.filter(i => i.store === store.id);
+    const total = items.reduce((s,i) => s+i.price, 0);
+    const saved = items.reduce((s,i) => s+(i.origPrice-i.price), 0);
+    lines.push(`📍 ${store.name} (${store.address})`);
+    CATEGORIES.filter(c => c!=='Allt' && items.some(i => i.category===c)).forEach(cat => {
+      lines.push(`  ${CAT_EMOJI[cat]} ${cat}`);
+      items.filter(i => i.category===cat).forEach(item =>
+        lines.push(`    • ${item.product} – ${item.price} kr (ord. ${item.origPrice} kr)`)
+      );
+    });
+    lines.push(`  💰 Totalt: ${total} kr | Sparar: ${saved} kr`);
+    lines.push('');
+  });
+  const totalSaved = shoppingList.reduce((s,i) => s+(i.origPrice-i.price), 0);
+  const totalCost = shoppingList.reduce((s,i) => s+i.price, 0);
+  lines.push(`✅ Totalt att betala: ${totalCost} kr`);
+  lines.push(`🎉 Total besparing: ${totalSaved} kr`);
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const btn = document.getElementById('copy-btn');
+    if (btn) { btn.textContent = '✅ Kopierat! Klistra in i Apple Notes'; btn.classList.add('copied'); }
+    const btn2 = document.getElementById('copy-btn2');
+    if (btn2) { btn2.textContent = '✅ Kopierat!'; btn2.classList.add('copied'); }
+    setTimeout(() => {
+      if (btn) { btn.textContent = '📋 Kopiera lista till Apple Notes'; btn.classList.remove('copied'); }
+      if (btn2) { btn2.textContent = '📋 Kopiera till Notes'; btn2.classList.remove('copied'); }
+    }, 2500);
+  });
+}
+
+function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+function addDeal() {
+  const product = document.getElementById('f-product').value.trim();
+  const price = parseFloat(document.getElementById('f-price').value);
+  const origPrice = parseFloat(document.getElementById('f-orig').value);
+  if (!product || !price || !origPrice) return;
+  deals.unshift({
+    id: Date.now(),
+    store: document.getElementById('f-store').value,
+    product,
+    detail: document.getElementById('f-detail').value,
+    price, origPrice,
+    unit: 'förp',
+    category: document.getElementById('f-cat').value,
+    emoji: CAT_EMOJI[document.getElementById('f-cat').value] || '🛒',
+    hot: false
+  });
+  document.getElementById('f-product').value = '';
+  document.getElementById('f-detail').value = '';
+  document.getElementById('f-price').value = '';
+  document.getElementById('f-orig').value = '';
+  closeModal();
+  render();
+}
+
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const listCount = shoppingList.length;
+
+  // List button
+  const lb = document.getElementById('list-btn');
+  lb.textContent = listCount > 0 ? `🧾 ${listCount}` : '🧾';
+  lb.className = listCount > 0 ? 'has-items' : '';
+
+  if (currentView === 'deals') renderDeals(q);
+  if (currentView === 'stores') renderStores();
+  if (currentView === 'list') renderList();
+}
+
+function renderDeals(q) {
+  const el = document.getElementById('view-deals');
+
+  let filtered = deals
+    .filter(d => activeStores.includes(d.store))
+    .filter(d => activeCategory === 'Allt' || d.category === activeCategory)
+    .filter(d => !q || d.product.toLowerCase().includes(q) || d.detail.toLowerCase().includes(q))
+    .sort((a,b) => {
+      if (sortBy === 'discount') return pct(b.price,b.origPrice) - pct(a.price,a.origPrice);
+      if (sortBy === 'price') return a.price - b.price;
+      return a.store.localeCompare(b.store);
+    });
+
+  const top3 = [...deals].filter(d=>activeStores.includes(d.store))
+    .sort((a,b)=>pct(b.price,b.origPrice)-pct(a.price,a.origPrice)).slice(0,3);
+
+  let html = `<div style="margin-bottom:16px">
+    <div class="section-title">🔥 Veckans toppfynd</div>
+    <div class="scroll-row">`;
+  top3.forEach(d => {
+    const s = getStore(d.store);
+    html += `<div class="top-card" style="border:2px solid ${s.color}25">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <span style="font-size:28px">${d.emoji}</span>
+        <span class="discount-badge">-${pct(d.price,d.origPrice)}%</span>
+      </div>
+      <div class="product-name">${d.product}</div>
+      <div class="product-detail">${d.detail}</div>
+      <div class="sale-price" style="color:${s.color}">${d.price} kr</div>
+      <div class="orig-price">${d.origPrice} kr/${d.unit}</div>
+      <div class="store-label" style="color:${s.color}">${s.name.split(' ')[0]}</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  // Category pills
+  html += `<div class="scroll-row" style="margin-bottom:8px">`;
+  CATEGORIES.forEach(c => {
+    html += `<button class="pill${activeCategory===c?' active':''}" onclick="activeCategory='${c}';render()">${c}</button>`;
+  });
+  html += `</div>`;
+
+  // Sort
+  html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+    <div style="font-size:12px;color:#888;font-weight:700">Sortera:</div>`;
+  [['discount','Bäst rea'],['price','Lägst pris'],['store','Butik']].forEach(([v,l]) => {
+    html += `<button class="sort-btn${sortBy===v?' active':''}" onclick="sortBy='${v}';render()">${l}</button>`;
+  });
+  html += `</div>`;
+
+  // Store pills
+  html += `<div class="scroll-row" style="margin-bottom:8px">`;
+  STORES.forEach(s => {
+    const on = activeStores.includes(s.id);
+    html += `<button class="store-pill" style="border-color:${on?s.color:'#ddd'};background:${on?s.color+'18':'white'};color:${on?s.color:'#aaa'}" onclick="toggleStore('${s.id}')">${s.name.split(' ')[0]}</button>`;
+  });
+  html += `</div>`;
+
+  // Deal cards
+  if (!filtered.length) {
+    html += `<div style="text-align:center;padding:32px;color:#aaa;font-weight:700">Inga erbjudanden hittades</div>`;
+  }
+  filtered.forEach(d => {
+    const s = getStore(d.store);
+    const inList = !!shoppingList.find(i => i.id === d.id);
+    html += `<div class="deal-card" style="border:1.5px solid ${s.color}15">
+      <span class="deal-emoji">${d.emoji}</span>
+      <div class="deal-info">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="deal-name">${d.product}</span>
+          ${d.hot ? '<span class="hot-badge">🔥 HET</span>' : ''}
+        </div>
+        <div class="deal-detail">${d.detail}</div>
+        <div class="deal-prices">
+          <span class="deal-sale" style="color:${s.color}">${d.price} kr</span>
+          <span class="deal-orig">${d.origPrice} kr/${d.unit}</span>
+          <span class="pct-badge">-${pct(d.price,d.origPrice)}%</span>
+        </div>
+        <div class="deal-store" style="color:${s.color}">${s.name}</div>
+      </div>
+      <button class="add-btn${inList?' in-list':''}" onclick="toggleInList(${d.id})">${inList?'✅':'➕'}</button>
+    </div>`;
+  });
+
+  html += `<div style="text-align:center;margin-top:20px;padding-bottom:16px">
+    <button onclick="openModal()" style="background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;border:none;border-radius:20px;padding:12px 28px;font-weight:800;font-size:14px;box-shadow:0 4px 16px rgba(15,52,96,0.3)">✏️ Lägg till eget erbjudande</button>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+function renderStores() {
+  const el = document.getElementById('view-stores');
+  let html = `<div style="font-weight:900;font-size:16px;color:#1a1a2e;margin-bottom:4px">🏪 Närmaste butiker från Farsta</div>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">Sorterade efter avstånd</div>`;
+  STORES.forEach(s => {
+    const count = deals.filter(d => d.store === s.id).length;
+    html += `<div class="store-card" style="border-left:4px solid ${s.color}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:800;font-size:15px;color:#1a1a2e">${s.name}</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">📍 ${s.address}</div>
+          <div style="font-size:12px;color:#888">🕐 ${s.hours} varje dag</div>
+          <div style="font-size:12px;color:${s.color};font-weight:800;margin-top:4px">📏 ${s.distance} från Farsta centrum</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:26px">${s.logo}</div>
+          <div style="font-size:11px;color:#aaa;font-weight:700;margin-top:4px">${count} erbjudanden</div>
+        </div>
+      </div>
+      <a href="${s.url}" target="_blank" class="store-link" style="background:${s.color}15;color:${s.color}">🌐 Se reklamblad på webben →</a>
+    </div>`;
+  });
+  html += `<div class="tip-box">💡 <b>Tips:</b> MatDax Hökarängen (1,8 km) är känt för halvpris på kött och storpack ris. Willys Skörndal (2,5 km) har Sveriges billigaste matkasse. Matvärlden Kungens Kurva är längre bort men har unikt sortiment och bra storpackpriser.</div>`;
+  el.innerHTML = html;
+}
+
+function toggleChecked(id) {
+  shoppingList = shoppingList.map(i => i.id === id ? Object.assign({}, i, { checked: !i.checked }) : i);
+  renderList();
+}
+
+function renderList() {
+  const el = document.getElementById('view-list');
+  const hasItems = shoppingList.length > 0;
+
+  // White Notes-style background
+  el.style.background = 'white';
+  el.style.minHeight = '100vh';
+  el.style.padding = '0';
+
+  let html = '';
+
+  if (!hasItems) {
+    el.style.background = '#f4f6fb';
+    el.style.padding = '12px';
+    html = `<div class="empty-state">
+      <div style="font-size:48px;margin-bottom:12px">🛒</div>
+      <div style="font-weight:700;font-size:15px;color:#888">Listan är tom</div>
+      <div style="font-size:13px;margin-top:4px;color:#bbb">Tryck ➕ på erbjudanden för att lägga till</div>
+      <button onclick="setView('deals')" style="margin-top:16px;background:#1a1a2e;color:white;border:none;border-radius:14px;padding:10px 24px;font-weight:800;font-size:14px">Se erbjudanden</button>
+    </div>`;
+    el.innerHTML = html;
+    return;
+  }
+
+  // Toolbar
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 0;border-bottom:1px solid #f0f0f0;padding-bottom:12px">
+    <div style="font-size:13px;color:#aaa;font-weight:600">${shoppingList.filter(i=>i.checked).length} av ${shoppingList.length} klara</div>
+    <div style="display:flex;gap:8px">
+      <button id="copy-btn2" onclick="copyToNotes()" style="background:none;border:none;font-size:13px;color:#007aff;font-weight:700;padding:0">📋 Kopiera</button>
+      <button onclick="clearList()" style="background:none;border:none;font-size:13px;color:#ff3b30;font-weight:700;padding:0">Rensa</button>
+    </div>
+  </div>`;
+
+  STORES.filter(s => shoppingList.some(i => i.store === s.id)).forEach(store => {
+    const items = shoppingList.filter(i => i.store === store.id);
+    const cats = CATEGORIES.filter(c => c !== 'Allt' && items.some(i => i.category === c));
+
+    // Store heading — colored, bold, like a Notes section title
+    html += `<div style="padding:20px 20px 4px">
+      <div style="font-size:22px;font-weight:900;color:${store.color};letter-spacing:-0.3px">${store.name}</div>
+      <div style="font-size:13px;color:#aaa;margin-top:1px">${store.address} · ${store.hours}</div>
+    </div>`;
+
+    cats.forEach(cat => {
+      // Category label subtle, like a subheading
+      html += `<div style="padding:10px 20px 2px;font-size:12px;font-weight:800;color:#bbb;text-transform:uppercase;letter-spacing:1px">${CAT_EMOJI[cat]} ${cat}</div>`;
+
+      items.filter(i => i.category === cat).forEach(item => {
+        const checked = !!item.checked;
+        html += `<div onclick="toggleChecked(${item.id})" style="display:flex;align-items:center;padding:11px 20px;gap:14px;border-bottom:1px solid #f5f5f5;cursor:pointer;background:white">
+          <!-- Circle checkbox -->
+          <div style="width:26px;height:26px;border-radius:50%;border:2px solid ${checked ? store.color : '#d0d0d0'};background:${checked ? store.color : 'white'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s">
+            ${checked ? '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polyline points="2,7 6,11 12,3" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}
+          </div>
+          <!-- Text -->
+          <div style="flex:1;min-width:0">
+            <div style="font-size:17px;font-weight:500;color:${checked ? '#bbb' : '#1a1a1a'};text-decoration:${checked ? 'line-through' : 'none'};transition:all 0.15s;line-height:1.3">
+              ${item.product} ${item.emoji}
+            </div>
+            <div style="font-size:13px;color:${checked ? '#d0d0d0' : '#888'};margin-top:1px">${item.detail} · ${item.price} kr</div>
+          </div>
+        </div>`;
+      });
+    });
+
+    // Thin divider between stores
+    html += `<div style="height:8px;background:#f7f7f7;border-top:1px solid #eee;border-bottom:1px solid #eee;margin:8px 0"></div>`;
+  });
+
+  // Bottom copy button
+  html += `<div style="padding:20px">
+    <button id="copy-btn" onclick="copyToNotes()" style="width:100%;padding:14px;background:#f7f7f7;border:none;border-radius:14px;font-size:15px;font-weight:700;color:#007aff">📋 Kopiera lista till Apple Notes</button>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// Init modal selects
+STORES.forEach(s => {
+  document.getElementById('f-store').innerHTML += `<option value="${s.id}">${s.name}</option>`;
+});
+CATEGORIES.filter(c => c!=='Allt').forEach(c => {
+  document.getElementById('f-cat').innerHTML += `<option value="${c}">${c}</option>`;
+});
+
+render();
+</script>
+</body>
+</html>
