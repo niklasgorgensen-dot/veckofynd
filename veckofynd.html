@@ -147,6 +147,115 @@
 </div>
 
 <script>
+// ── Supabase via fetch (no external library needed) ───
+const SUPA_URL = 'https://ihyolgjmppzgxhifhooh.supabase.co';
+const SUPA_KEY = 'sb_publishable_rm6yWqFKFiFR3dGaIPnV5w_6r0Jbsx4';
+
+const supa = {
+  async select(table) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?select=*`, {
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+    });
+    return r.json();
+  },
+  async upsert(table, row) {
+    await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(row)
+    });
+  },
+  async delete(table, id) {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+    });
+  },
+  async deleteAll(table) {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?id=neq.0`, {
+      method: 'DELETE',
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+    });
+  },
+  async update(table, id, data) {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  }
+};
+
+// Poll every 5 seconds for real-time updates
+function subscribeRealtime() {
+  setInterval(loadShoppingList, 5000);
+}
+
+async function loadShoppingList() {
+  try {
+    const data = await supa.select('shopping_list');
+    if (Array.isArray(data)) {
+      shoppingList = data.map(r => ({
+        id: r.id,
+        store: r.store,
+        product: r.product,
+        detail: r.detail,
+        price: r.price,
+        origPrice: r.orig_price,
+        unit: r.unit,
+        category: r.category,
+        emoji: r.emoji,
+        checked: r.checked,
+      }));
+      render();
+    }
+  } catch(e) { console.log('Load error', e); }
+}
+
+async function saveToSupabase(item) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/shopping_list`, {
+      method: 'POST',
+      headers: { 
+        apikey: SUPA_KEY, 
+        Authorization: `Bearer ${SUPA_KEY}`, 
+        'Content-Type': 'application/json', 
+        Prefer: 'resolution=merge-duplicates' 
+      },
+      body: JSON.stringify({
+        id: item.id,
+        store: item.store,
+        product: item.product,
+        detail: item.detail,
+        price: item.price,
+        orig_price: item.origPrice,
+        unit: item.unit,
+        category: item.category,
+        emoji: item.emoji,
+        checked: item.checked || false,
+      })
+    });
+    const text = await r.text();
+    console.log('Save result:', r.status, text);
+  } catch(e) {
+    console.error('Save error:', e);
+    alert('Kunde inte spara: ' + e.message);
+  }
+}
+
+async function deleteFromSupabase(id) {
+  await supa.delete('shopping_list', id);
+}
+
+async function clearSupabase() {
+  await supa.deleteAll('shopping_list');
+}
+
+async function updateCheckedSupabase(id, checked) {
+  await supa.update('shopping_list', id, { checked });
+}
+
+// ── Stores & Deals ────────────────────────────────────
 const STORES = [
   { id:"ica",       name:"ICA Kvantum Farsta",      color:"#D22B2B", logo:"🔴", address:"Störöplan 2, Farsta",         distance:"0.3 km", hours:"07–22", url:"https://www.ica.se/erbjudanden/ica-kvantum-farsta-1003412/" },
   { id:"hemkop",    name:"Hemköp Farsta",            color:"#007A3D", logo:"🟢", address:"Farstavägen 26-28, Farsta",   distance:"0.4 km", hours:"07–22", url:"https://www.hemkop.se/erbjudanden/4799" },
@@ -246,22 +355,23 @@ function toggleStore(id) {
   render();
 }
 
-function toggleInList(id) {
+async function toggleInList(id) {
   const deal = deals.find(d => d.id === id);
   if (!deal) return;
-  if (shoppingList.find(i => i.id === id)) shoppingList = shoppingList.filter(i => i.id !== id);
-  else shoppingList.push(deal);
-  render();
+  if (shoppingList.find(i => i.id === id)) {
+    await deleteFromSupabase(id);
+  } else {
+    await saveToSupabase(deal);
+  }
+  // realtime will trigger reload
 }
 
-function removeFromList(id) {
-  shoppingList = shoppingList.filter(i => i.id !== id);
-  render();
+async function removeFromList(id) {
+  await deleteFromSupabase(id);
 }
 
-function clearList() {
-  shoppingList = [];
-  render();
+async function clearList() {
+  await clearSupabase();
 }
 
 function copyToNotes() {
@@ -305,7 +415,7 @@ function addDeal() {
   const price = parseFloat(document.getElementById('f-price').value);
   const origPrice = parseFloat(document.getElementById('f-orig').value);
   if (!product || !price || !origPrice) return;
-  deals.unshift({
+  const newDeal = {
     id: Date.now(),
     store: document.getElementById('f-store').value,
     product,
@@ -315,7 +425,8 @@ function addDeal() {
     category: document.getElementById('f-cat').value,
     emoji: CAT_EMOJI[document.getElementById('f-cat').value] || '🛒',
     hot: false
-  });
+  };
+  deals.unshift(newDeal);
   document.getElementById('f-product').value = '';
   document.getElementById('f-detail').value = '';
   document.getElementById('f-price').value = '';
@@ -455,9 +566,14 @@ function renderStores() {
   el.innerHTML = html;
 }
 
-function toggleChecked(id) {
-  shoppingList = shoppingList.map(i => i.id === id ? Object.assign({}, i, { checked: !i.checked }) : i);
+async function toggleChecked(id) {
+  const item = shoppingList.find(i => i.id === id);
+  if (!item) return;
+  const newChecked = !item.checked;
+  // optimistic UI update
+  shoppingList = shoppingList.map(i => i.id === id ? Object.assign({}, i, { checked: newChecked }) : i);
   renderList();
+  await updateCheckedSupabase(id, newChecked);
 }
 
 function renderList() {
@@ -545,7 +661,10 @@ CATEGORIES.filter(c => c!=='Allt').forEach(c => {
   document.getElementById('f-cat').innerHTML += `<option value="${c}">${c}</option>`;
 });
 
+// Show deals immediately, then load shopping list from Supabase
 render();
+loadShoppingList();
+subscribeRealtime();
 </script>
 </body>
 </html>
