@@ -226,9 +226,10 @@ const STORES = [
   { id:"coop",      name:"Coop Farsta",              color:"#00529B", logo:"🔵", address:"Farstaplan 21, Farsta",       distance:"0.5 km", hours:"07–22", url:"https://www.coop.se/butiker-erbjudanden/coop/coop-farsta/" },
   { id:"matdax",    name:"MatDax Hökarängen",        color:"#FF6B00", logo:"🟠", address:"Pepparvägen 5, Hökarängen",   distance:"1.8 km", hours:"07–22", url:"https://www.matdax.se/erbjudanden/" },
   { id:"willys",    name:"Willys Skörndal",          color:"#E4002B", logo:"🟥", address:"Sköndalsvägen 7, Skörndal",   distance:"2.5 km", hours:"07–21", url:"https://www.willys.se/erbjudanden" },
+  { id:"icamaxi",   name:"Maxi ICA Stormarknad Haninge", color:"#E2011A", logo:"🔴", address:"Österport 4, Haninge",       distance:"~13 km", hours:"07–22", url:"https://www.ica.se/erbjudanden/maxi-ica-stormarknad-haninge-1003777/" },
 ];
 
-const CATEGORIES = ["Allt","Kött","Kyckling","Fisk & Skaldjur","Pasta & Ris","Mejeri & Övrigt"];
+const CATEGORIES = ["Allt","Kött","Kyckling","Fisk & Skaldjur","Pasta & Ris","Mejeri & Övrigt","Hem & Hushåll"];
 const CAT_EMOJI = { "Kött":"🥩","Kyckling":"🍗","Fisk & Skaldjur":"🐟","Pasta & Ris":"🍝","Mejeri & Övrigt":"🧀" };
 
 let deals = [
@@ -280,6 +281,54 @@ let deals = [
   { id:505, store:"hemkop", product:"Risifrutti",      detail:"165-175g · olika sorter",          price:9,     origPrice:9,     unit:"st",   category:"Mejeri & Övrigt", emoji:"🍮", hot:false },
   { id:506, store:"hemkop", product:"Bars / Milkshake",detail:"Barebells · 45-55g, 330ml",        price:17.50, origPrice:17.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍫", hot:false },
   { id:507, store:"hemkop", product:"Läsk",            detail:"7up/Mountain Dew/Pepsi · 33cl · +pant", price:6, origPrice:6,   unit:"st",   category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
+
+  // ───────── Maxi ICA Stormarknad Haninge – veckans erbjudanden (mat/dagligvaror) ─────────
+  { id:601, store:"icamaxi", product:"Fryst kyckling",        detail:"Guldfågeln, Sverige · 350-500g · 3 för 95 kr · Max 1/hushåll", price:31.67, origPrice:31.67, unit:"st",   category:"Kyckling",        emoji:"🍗", hot:true  },
+  { id:602, store:"icamaxi", product:"Fryst Oxpytt",          detail:"Findus · 1500g",                    price:79.90, origPrice:90.80, unit:"st",   category:"Kött",            emoji:"🥩", hot:false },
+  { id:603, store:"icamaxi", product:"Falukorv",              detail:"Härryda Karlsson · 500g",           price:34.90, origPrice:45.30, unit:"st",   category:"Kött",            emoji:"🌭", hot:false },
+  { id:604, store:"icamaxi", product:"Smörgåsmat / pålägg",   detail:"Pärsons · 90-160g · 2 för 35 kr",   price:17.50, origPrice:17.50, unit:"st",   category:"Kött",            emoji:"🥓", hot:false },
+  { id:605, store:"icamaxi", product:"Potatisgratäng",        detail:"ICA · 800g",                        price:15,    origPrice:18.80, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
+  { id:606, store:"icamaxi", product:"Fryst pizza Ristorante",detail:"Dr Oetker · 320-360g · 4 för 100 kr · Max 1/hushåll", price:25, origPrice:25, unit:"st", category:"Mejeri & Övrigt", emoji:"🍕", hot:false },
+  { id:607, store:"icamaxi", product:"Ketchup",               detail:"Felix · 970-1000g · 2 för 56 kr",   price:28,    origPrice:28,    unit:"st",   category:"Pasta & Ris",     emoji:"🍅", hot:false },
+  { id:608, store:"icamaxi", product:"Olivolja",              detail:"Fontana · 500ml",                   price:22.90, origPrice:30.10, unit:"st",   category:"Pasta & Ris",     emoji:"🫒", hot:false },
+  { id:609, store:"icamaxi", product:"Ädelost",               detail:"Kvibille · 140g",                   price:25,    origPrice:28.20, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:610, store:"icamaxi", product:"Mjukost i tub",         detail:"Kavli · 230-275g · Max 2/hushåll",  price:30.90, origPrice:34.80, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:611, store:"icamaxi", product:"Smör",                  detail:"Valio · 500g",                      price:44.90, origPrice:44.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧈", hot:false },
+  { id:612, store:"icamaxi", product:"Laktosfri mjölk",       detail:"Valio · 1,5 l · 2 för 35 kr",       price:17.50, origPrice:21.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:613, store:"icamaxi", product:"Verum filmjölk",        detail:"1 kg · 2 för 39 kr",                price:19.50, origPrice:19.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:614, store:"icamaxi", product:"Havredryck",            detail:"Fazer Aito · 1 l · 2 för 28 kr",    price:14,    origPrice:14,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:615, store:"icamaxi", product:"Ris- / mannamål",       detail:"Risifrutti · 165-175g · 4 för 42 kr", price:10.50, origPrice:12.10, unit:"st", category:"Mejeri & Övrigt", emoji:"🍮", hot:false },
+  { id:616, store:"icamaxi", product:"Korv- / hamburgerbröd", detail:"Pågen · 320-416g · 2 för 40 kr",    price:20,    origPrice:20,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🍔", hot:false },
+  { id:617, store:"icamaxi", product:"Hönökaka / Himla Go",   detail:"Pågen · 400-450g",                  price:17.90, origPrice:17.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫓", hot:false },
+  { id:618, store:"icamaxi", product:"Sirapslimpa",           detail:"ICA Selection · 900g",              price:25,    origPrice:34.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:619, store:"icamaxi", product:"Kolsyrat vatten",       detail:"Loka · 12×33cl · 2 för 75 kr · +pant · Max 1/hushåll", price:37.50, origPrice:42.10, unit:"st", category:"Mejeri & Övrigt", emoji:"💧", hot:false },
+  { id:620, store:"icamaxi", product:"Iskaffe",               detail:"Löfbergs · 230ml · 3 för 45 kr",    price:15,    origPrice:19.40, unit:"st",   category:"Mejeri & Övrigt", emoji:"☕", hot:false },
+  { id:621, store:"icamaxi", product:"Kaffekapslar",          detail:"Zoégas/Starbucks · 10-pack · 3 för 90 kr", price:30, origPrice:30, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
+  { id:622, store:"icamaxi", product:"Blåbär i ask",          detail:"ICA · Marocko/Spanien · 125g",      price:20,    origPrice:24.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫐", hot:false },
+  { id:623, store:"icamaxi", product:"Aprikoser i ask",       detail:"500g",                              price:30,    origPrice:39.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍑", hot:false },
+  { id:624, store:"icamaxi", product:"Kastanjechampinjoner",  detail:"i ask · 250g",                      price:20,    origPrice:24.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍄", hot:false },
+  { id:625, store:"icamaxi", product:"Paprika 2-pack",        detail:"i påse · 350g",                     price:20,    origPrice:23.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫑", hot:false },
+  { id:626, store:"icamaxi", product:"Snackpaprika",          detail:"ICA · Nederländerna · 150g · 2 för 25 kr", price:12.50, origPrice:19.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🫑", hot:false },
+  { id:627, store:"icamaxi", product:"Finbladiga sallater",   detail:"ICA · i påse · 65g · 2 för 24 kr",  price:12,    origPrice:12,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥬", hot:false },
+  { id:628, store:"icamaxi", product:"Småtomater i ask",      detail:"ICA · Spanien/Marocko · 350g",      price:25,    origPrice:29.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
+  { id:629, store:"icamaxi", product:"Marinader / Rubs",      detail:"Santa Maria · 22-75g · 4 för 22 kr",price:5.50,  origPrice:5.50,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🧂", hot:false },
+  { id:630, store:"icamaxi", product:"Chips / ostbågar",      detail:"Estrella · 150-275g · 3 för 69 kr", price:23,    origPrice:23,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
+  { id:631, store:"icamaxi", product:"Glass flerpack",        detail:"GB Glace/Magnum · 3-12 pack · 3 för 100 kr", price:33.33, origPrice:33.33, unit:"st", category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
+  { id:632, store:"icamaxi", product:"Gräddglass / sorbet",   detail:"SIA Glass · 0,5 l · 3 för 42 kr · Max 1/hushåll", price:14, origPrice:14, unit:"st", category:"Mejeri & Övrigt", emoji:"🍨", hot:false },
+  { id:633, store:"icamaxi", product:"Chokladkaka",           detail:"Marabou · 160-180g · 2 för 45 kr",  price:22.50, origPrice:22.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍫", hot:false },
+  { id:634, store:"icamaxi", product:"Öl 3,5%",               detail:"Carlsberg · 6×50cl · +pant · Max 2/hushåll", price:57.90, origPrice:65.20, unit:"st", category:"Mejeri & Övrigt", emoji:"🍺", hot:false },
+
+  // ── ICA Maxi Haninge – hushåll & hygien (ej kläder) ──
+  { id:635, store:"icamaxi", product:"Munskölj",              detail:"Listerine · 500ml",                 price:35.90, origPrice:46.90, unit:"st", category:"Hem & Hushåll", emoji:"🪥", hot:false },
+  { id:636, store:"icamaxi", product:"Duschcreme",            detail:"Family Fresh · 500ml · 2 för 34 kr",price:17,    origPrice:20.90, unit:"st", category:"Hem & Hushåll", emoji:"🧴", hot:false },
+  { id:637, store:"icamaxi", product:"Schampo & balsam",      detail:"OGX · 385ml · 2 för 159 kr",        price:79.50, origPrice:113,   unit:"st", category:"Hem & Hushåll", emoji:"🧴", hot:false },
+  { id:638, store:"icamaxi", product:"Bindor / intimtvätt",   detail:"Libresse · 9-50 pack · 4 för 85 kr",price:21.25, origPrice:21.25, unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:false },
+  { id:639, store:"icamaxi", product:"Städservetter",         detail:"ICA · 70-pack · 3 för 40 kr",       price:13.33, origPrice:20.50, unit:"st", category:"Hem & Hushåll", emoji:"🧽", hot:false },
+  { id:640, store:"icamaxi", product:"Servetter",             detail:"ICA · 50-pack · 2 för 55 kr",       price:27.50, origPrice:31.50, unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:false },
+  { id:641, store:"icamaxi", product:"Frys- & plastpåsar",    detail:"ICA · 25-100 st · 3 för 30 kr",     price:10,    origPrice:10,    unit:"st", category:"Hem & Hushåll", emoji:"🛍️", hot:false },
+  { id:642, store:"icamaxi", product:"Grillkol & briketter",  detail:"ICA · 2,5 kg · 2 för 89 kr",        price:44.50, origPrice:54.90, unit:"st", category:"Hem & Hushåll", emoji:"🔥", hot:false },
+  { id:643, store:"icamaxi", product:"Sommarspolarvätska",    detail:"Kemetyl · 2 för 50 kr",             price:25,    origPrice:39.90, unit:"st", category:"Hem & Hushåll", emoji:"🚗", hot:false },
+  { id:644, store:"icamaxi", product:"Kattmat",               detail:"Whiskas · 12×85g",                  price:54.90, origPrice:63.90, unit:"st", category:"Hem & Hushåll", emoji:"🐱", hot:false },
 ];
 
 let shoppingList = [];
