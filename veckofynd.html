@@ -48,26 +48,40 @@ const STORES = [
 ];
 
 let deals = [
+  // ───────── Willys Älvsjö – willys.se, butik bytt till Älvsjö ─────────
+  { id:951, store:"willys", product:"Färsk fläskytterfilé",   detail:"Danish Crown · ca 650g · Spara 50,90 kr · Max 3", price:69.90, origPrice:120.80, unit:"kg", category:"Kött", emoji:"🥩", hot:true  },
+  { id:952, store:"willys", product:"Hushållspapper/toalettpapper", detail:"Lambi · 8-16-pack · Spara 54,80-88,80 kr · Max 3", price:49.50, origPrice:104.30, unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:true  },
+  { id:953, store:"willys", product:"Präst/Herrgård/Grevé",   detail:"Arla Ko · ca 670g · Spara 33 kr · Max 2",   price:79.90, origPrice:112.90, unit:"kg", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:954, store:"willys", product:"Smör",                   detail:"Svenskt Smör · 500g · Spara 41,80 kr · Max 3", price:39,   origPrice:80.80,  unit:"st", category:"Mejeri & Övrigt", emoji:"🧈", hot:false },
+  { id:955, store:"willys", product:"Glass Klassikerlåda 18-pack", detail:"GB Glace · Spara 45,10 kr · Max 3",     price:79.90, origPrice:125,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
+  { id:956, store:"willys", product:"Pulled pork",            detail:"",                                          price:29.90, origPrice:29.90,  unit:"st", category:"Kött", emoji:"🍖", hot:false },
+  { id:957, store:"willys", product:"Skivat bacon 3-pack",    detail:"Garant · 3x140g",                          price:29.67, origPrice:29.67,  unit:"st", category:"Kött", emoji:"🥓", hot:false },
+  { id:958, store:"willys", product:"Färskost",               detail:"Philadelphia · 300g · Spara 5,29 kr",       price:24.90, origPrice:30.19,  unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:959, store:"willys", product:"Flingor",                detail:"Nestlé · 325-375g",                        price:29.80, origPrice:29.80,  unit:"st", category:"Mejeri & Övrigt", emoji:"🥣", hot:false },
+  { id:960, store:"willys", product:"Skivat smörgåspålägg",   detail:"Pärsons · 150-200g",                       price:25,    origPrice:25,     unit:"st", category:"Mejeri & Övrigt", emoji:"🥪", hot:false },
+  { id:961, store:"willys", product:"Juice/nektar",           detail:"God Morgon · 1L · Spara 3,66-11,23 kr",     price:19.90, origPrice:23.56,  unit:"st", category:"Mejeri & Övrigt", emoji:"🧃", hot:false },
+  { id:962, store:"willys", product:"Frökusar/fruktkusar 6-pack", detail:"Fazer · 420g · Spara 3,60-6,24 kr",     price:22.90, origPrice:26.50,  unit:"st", category:"Mejeri & Övrigt", emoji:"🥐", hot:false },
+  { id:963, store:"willys", product:"Iste",                   detail:"Pfanner · 2L · Spara 4,68-5,44 kr",        price:18,    origPrice:22.68,  unit:"st", category:"Mejeri & Övrigt", emoji:"🧊", hot:false },
   // ───────── ICA Supermarket Telefonplan – ica.se Vecka 27 ─────────
-  { id:901, store:"ica", product:"Läsk",                     detail:"Coca-Cola/Fanta/Sprite · 1,5L · +pant · 5 för 65 kr", price:13,    origPrice:13,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:true  },
-  { id:902, store:"ica", product:"Mozzarella",                detail:"Galbani · 125-150g · 2 för 25 kr",       price:12.50, origPrice:12.50, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:903, store:"ica", product:"Grillkorv",                 detail:"Scan · 270g/480-640g",                   price:35,    origPrice:35,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
-  { id:904, store:"ica", product:"Halländskt bondbröd",       detail:"ICA Selection · 1kg",                    price:30,    origPrice:30,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:905, store:"ica", product:"Kaffe",                     detail:"Löfbergs · 450g · 3 för 149 kr · Max 1", price:49.67, origPrice:49.67, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
-  { id:906, store:"ica", product:"Fryst kryddad kyckling",    detail:"Guldfågeln · Sverige · 480-760g · 2 för 140 kr · Max 1", price:70, origPrice:70, unit:"st", category:"Kyckling", emoji:"🍗", hot:true  },
-  { id:907, store:"ica", product:"Kex",                       detail:"Ballerina/Singoalla/Brago, Göteborgs · 175-225g · 2 för 30 kr", price:15, origPrice:15, unit:"st", category:"Mejeri & Övrigt", emoji:"🍪", hot:false },
+  { id:901, store:"ica", product:"Läsk",                     detail:"Coca-Cola/Fanta/Sprite · 1,5L · +pant · 5 för 65 kr", price:13,    origPrice:22.61,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:true  },
+  { id:902, store:"ica", product:"Mozzarella",                detail:"Galbani · 125-150g · 2 för 25 kr",       price:12.50, origPrice:20.46, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:903, store:"ica", product:"Grillkorv",                 detail:"Scan · 270g/480-640g",                   price:35,    origPrice:49.16,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
+  { id:904, store:"ica", product:"Halländskt bondbröd",       detail:"ICA Selection · 1kg",                    price:30,    origPrice:38.75,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:905, store:"ica", product:"Kaffe",                     detail:"Löfbergs · 450g · 3 för 149 kr · Max 1", price:49.67, origPrice:71.18, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
+  { id:906, store:"ica", product:"Fryst kryddad kyckling",    detail:"Guldfågeln · Sverige · 480-760g · 2 för 140 kr · Max 1", price:70, origPrice:94.59, unit:"st", category:"Kyckling", emoji:"🍗", hot:true  },
+  { id:907, store:"ica", product:"Kex",                       detail:"Ballerina/Singoalla/Brago, Göteborgs · 175-225g · 2 för 30 kr", price:15, origPrice:21.71, unit:"st", category:"Mejeri & Övrigt", emoji:"🍪", hot:false },
   { id:908, store:"ica", product:"Herrgård/Präst/Grevé",      detail:"Arla · ca 700g",                         price:79,    origPrice:79,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:909, store:"ica", product:"Pizza Ristorante",          detail:"Dr. Oetker · 280-360g · 2 för 55 kr",    price:27.50, origPrice:27.50, unit:"st", category:"Pasta & Ris", emoji:"🍕", hot:false },
-  { id:910, store:"ica", product:"Mjukost i tub",             detail:"Kavli · 230-275g · 2 för 65 kr · Max 1", price:32.50, origPrice:32.50, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:911, store:"ica", product:"Färskost",                  detail:"ICA · 200g · 2 för 30 kr",               price:15,    origPrice:15,    unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:912, store:"ica", product:"Skärgårdskaka",             detail:"Pågen · 750g",                           price:25,    origPrice:25,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:913, store:"ica", product:"Äggnudlar",                 detail:"ICA · 250g · 4 för 30 kr",               price:7.50,  origPrice:7.50,  unit:"st", category:"Pasta & Ris", emoji:"🍜", hot:false },
-  { id:914, store:"ica", product:"Fyllda baguetter",          detail:"ICA · 208-245g",                         price:32,    origPrice:32,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥖", hot:false },
-  { id:915, store:"ica", product:"Majs 3-pack",               detail:"ICA · 3x198g · 2 för 40 kr",             price:20,    origPrice:20,    unit:"st", category:"Mejeri & Övrigt", emoji:"🌽", hot:false },
-  { id:916, store:"ica", product:"Karré med ben",             detail:"ICA · Sverige · ca 1000g · Max 2",       price:75,    origPrice:75,    unit:"kg", category:"Kött", emoji:"🥩", hot:true  },
-  { id:917, store:"ica", product:"Salami",                    detail:"Göl · 125-150g · 2 för 42 kr",           price:21,    origPrice:21,    unit:"st", category:"Kött", emoji:"🍕", hot:false },
-  { id:918, store:"ica", product:"Färska korvar",              detail:"ICA Selection · Sverige · 300g",         price:35,    origPrice:35,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
-  { id:919, store:"ica", product:"Grillskivor av picnicbog",   detail:"ICA · Sverige · ca 800g",                price:79,    origPrice:79,    unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:909, store:"ica", product:"Pizza Ristorante",          detail:"Dr. Oetker · 280-360g · 2 för 55 kr",    price:27.50, origPrice:38.5, unit:"st", category:"Pasta & Ris", emoji:"🍕", hot:false },
+  { id:910, store:"ica", product:"Mjukost i tub",             detail:"Kavli · 230-275g · 2 för 65 kr · Max 1", price:32.50, origPrice:41.59, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:911, store:"ica", product:"Färskost",                  detail:"ICA · 200g · 2 för 30 kr",               price:15,    origPrice:20.77,    unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:912, store:"ica", product:"Skärgårdskaka",             detail:"Pågen · 750g",                           price:25,    origPrice:38.75,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:913, store:"ica", product:"Äggnudlar",                 detail:"ICA · 250g · 4 för 30 kr",               price:7.50,  origPrice:9.78,  unit:"st", category:"Pasta & Ris", emoji:"🍜", hot:false },
+  { id:914, store:"ica", product:"Fyllda baguetter",          detail:"ICA · 208-245g",                         price:32,    origPrice:47.95,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥖", hot:false },
+  { id:915, store:"ica", product:"Majs 3-pack",               detail:"ICA · 3x198g · 2 för 40 kr",             price:20,    origPrice:25.09,    unit:"st", category:"Mejeri & Övrigt", emoji:"🌽", hot:false },
+  { id:916, store:"ica", product:"Karré med ben",             detail:"ICA · Sverige · ca 1000g · Max 2",       price:75,    origPrice:109.67,    unit:"kg", category:"Kött", emoji:"🥩", hot:true  },
+  { id:917, store:"ica", product:"Salami",                    detail:"Göl · 125-150g · 2 för 42 kr",           price:21,    origPrice:29.03,    unit:"st", category:"Kött", emoji:"🍕", hot:false },
+  { id:918, store:"ica", product:"Färska korvar",              detail:"ICA Selection · Sverige · 300g",         price:35,    origPrice:44.57,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
+  { id:919, store:"ica", product:"Grillskivor av picnicbog",   detail:"ICA · Sverige · ca 800g",                price:79,    origPrice:114.2,    unit:"kg", category:"Kött", emoji:"🥩", hot:false },
   // ───────── Stora Coop Västberga – coop.se reklamblad Vecka 27 ─────────
   { id:301, store:"coop", product:"Nektariner i korg",       detail:"Spanien/Italien · 1kg · Klass 1",        price:25,    origPrice:25,    unit:"kg",  category:"Mejeri & Övrigt", emoji:"🍑", hot:false },
   { id:302, store:"coop", product:"Ketchup/senap",           detail:"Felix · 360-500g",                       price:15,    origPrice:15,    unit:"st",  category:"Pasta & Ris", emoji:"🍅", hot:false },
@@ -224,47 +238,11 @@ let deals = [
   { id:797, store:"matdax", product:"Schampo/Balsam",            detail:"Fructis · 200-250ml",         price:27.95, origPrice:27.95, unit:"förp", category:"Hem & Hushåll", emoji:"🧴", hot:false },
   { id:798, store:"matdax", product:"WC-Duck Marine",            detail:"55g",                         price:10,    origPrice:10,    unit:"förp", category:"Hem & Hushåll", emoji:"🧽", hot:false },
   { id:799, store:"matdax", product:"Avfallspåsar",              detail:"Fixa · 25-pack",              price:10,    origPrice:10,    unit:"förp", category:"Hem & Hushåll", emoji:"🗑️", hot:false },
-  // ───────── Hemköp Farsta – denna veckas mejl "Fyndfest hela veckan!" (v26, 22/6) ─────────
-  // ───────── Coop (Stora Coop Västberga) – denna veckas mejl (v26, 22/6), namngivna ─────────
-  // ───────── MatDax Hökarängen – dagspriser från reklamblad (v22) ─────────
-
-  // ───────── Coop (Stora Coop) – medlemspris, gäller 25/5–31/5 ─────────
-
   // ───────── Willys – gäller 25/5–31/5 (pris härlett ur jämförpris × storlek) ─────────
-  { id:401, store:"willys", product:"Nötfärs",        detail:"Irland 20% · 800g · Max 3/hushåll", price:89.90, origPrice:105, unit:"förp", category:"Kött",            emoji:"🥩", hot:true  },
-  { id:402, store:"willys", product:"Laxfilé 4-pack", detail:"2 paket för 99 kr · Max 2/hushåll", price:49.50, origPrice:49.50, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:true, limitedDays:"Endast mån–ons 25–27/5" },
-  { id:403, store:"willys", product:"Bregott",        detail:"350-500g · ej eko/laktosfri · Max 3/hushåll", price:37.80, origPrice:37.80, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧈", hot:false },
-  { id:404, store:"willys", product:"Broccoli",       detail:"Spanien · klass 1 · 250g",          price:9.90,  origPrice:9.90,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🥦", hot:false },
-  { id:405, store:"willys", product:"Chips / ostsnacks", detail:"OLW · 200-275g · olika sorter",  price:22.50, origPrice:22.50, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
 
-  // ── Willys Sköndal – hämtat från willys.se (hela publika listan) ──
-  { id:406, store:"willys", product:"Svenska jordgubbar",     detail:"Garant · Sverige · 400g · Spara 40 kr · Max 3", price:39.90, origPrice:79.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🍓", hot:true  },
-  { id:407, store:"willys", product:"Västerbottensost",       detail:"450g",                              price:69.90, origPrice:69.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:408, store:"willys", product:"Flerpack glass",         detail:"GB Glace/Magnum/Twister · 3-10p · Max 5", price:29.90, origPrice:29.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
-  { id:409, store:"willys", product:"Hela kaffebönor",        detail:"Lavazza · 1 kg · Max 3",            price:185,   origPrice:185,   unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
-  { id:410, store:"willys", product:"Parisergrill 4-pack",    detail:"Nyhléns Hugosons · 400g · Spara 4,75 kr", price:34.90, origPrice:39.65, unit:"st", category:"Kött", emoji:"🌭", hot:false },
-  { id:411, store:"willys", product:"Grillkorv",              detail:"Scan · 400-640g",                   price:36.80, origPrice:36.80, unit:"st", category:"Kött", emoji:"🌭", hot:false },
-  { id:412, store:"willys", product:"Hamburgerost",           detail:"Sottilette · 200g · Spara 5 kr",    price:19.90, origPrice:24.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:413, store:"willys", product:"Ishavsräkor med skal",   detail:"Garant · 750g · Spara 18,93 kr",    price:89.90, origPrice:108.83, unit:"st", category:"Fisk & Skaldjur", emoji:"🦐", hot:false },
 
-  { id:414, store:"willys", product:"Kycklinglårfilé",       detail:"Eldorado · 700g · Spara 6,78 kr",    price:49.90, origPrice:56.68, unit:"st", category:"Kyckling",        emoji:"🍗", hot:true  },
-  { id:415, store:"willys", product:"Olivolja",              detail:"Farchioni · 500ml · Spara 34,64 kr · Max 3", price:59.90, origPrice:94.54, unit:"st", category:"Pasta & Ris", emoji:"🫒", hot:false },
-  { id:416, store:"willys", product:"Gårdsgoda yoghurt",     detail:"Valio · 400-500g · Max 3",          price:29.90, origPrice:29.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
 
-  { id:417, store:"willys", product:"Läsk 4-pack",            detail:"Coca-Cola/Fanta · 4×1,5L · +pant · Spara 26,25 kr · Max 3", price:39.90, origPrice:39.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:true  },
-  { id:418, store:"willys", product:"Ekologisk minivattenmelon", detail:"Spanien · ca 1,6 kg",                price:19.90, origPrice:19.90, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍉", hot:false },
-  { id:419, store:"willys", product:"Skivad karré",           detail:"Dalsjöfors · ca 800g · Spara 32,75 kr", price:59.90, origPrice:92.65, unit:"kg", category:"Kött", emoji:"🥓", hot:false },
-  { id:420, store:"willys", product:"Hushållsost",            detail:"Arla · ca 2,2 kg · Spara 37 kr · Max 2", price:74.90, origPrice:111.90, unit:"kg", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:421, store:"willys", product:"Flytande tvättmedel",    detail:"A+ · 880-920ml · 3 för 79 kr · Max 3", price:26.33, origPrice:44.80, unit:"st", category:"Hem & Hushåll", emoji:"🧴", hot:false },
-  { id:422, store:"willys", product:"Kaffekapslar",           detail:"Starbucks/Zoégas · 10-pack · 3 för 89 kr · Max 2", price:29.67, origPrice:29.67, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
-  { id:423, store:"willys", product:"Orientaliskt bröd 4-pack", detail:"Garant · 350g · 2 för 14 kr · Max 3", price:7, origPrice:7, unit:"st", category:"Mejeri & Övrigt", emoji:"🫓", hot:false },
-  { id:424, store:"willys", product:"Naturgodis lösvikt",     detail:"Pick & Mix · Spara 40 kr · Max 2",   price:129, origPrice:129, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍬", hot:false },
 
-  // ───────── Hemköp – gäller t.o.m 31/5 (pris härlett ur jämförpris × storlek) ─────────
-
-  // ───────── Maxi ICA Stormarknad Haninge – veckans erbjudanden (mat/dagligvaror) ─────────
-
-  // ── ICA Maxi Haninge – hushåll & hygien (ej kläder) ──
 ];
 
 // ── Vecka ─────────────────────────────────────────────────
@@ -295,6 +273,8 @@ const FALLBACK_STORE = { name:'Övrigt', color:'#B6A893', distance:'' };
 function storeById(id){ return STORES.find(s=>s.id===id) || FALLBACK_STORE; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function kr(n){ if(n==null||isNaN(n)) return '0 kr'; return (Number.isInteger(n)? String(n) : Number(n).toFixed(2).replace('.',',')) + ' kr'; }
+function unitSuffix(u){ return u==='kg'?'/kg':u==='liter'?'/liter':u==='st'?'/st':u==='förp'?'/st':''; }
+function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
 
 // ── State ─────────────────────────────────────────────────
 let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
@@ -388,9 +368,9 @@ function offerCard(o){
   let details = o.detail||'';
   if(o.limitedDays) details = (details?details+' · ':'')+'⏰ '+o.limitedDays;
   const priceRow = `<div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
-      <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}</span>
-      ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}</span>
-      <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}</span>`:''}
+      <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>
+      ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}${unitSuffix(o.unit)}</span>
+      <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}${unitSuffix(o.unit)}</span>`:''}
     </div>`;
   const badge = hasDisc?`<div style="background:#FBEAE2;color:#C2431F;font-weight:800;font-size:13px;padding:5px 9px;border-radius:10px;flex:none;font-family:${DISP};">-${pct}%</div>`:'';
   const addStyle = added
@@ -411,7 +391,7 @@ function offerCard(o){
   </div>`;
 }
 function viewOffers(){
-  const totalSave = deals.reduce((a,o)=>a+Math.max(0,(o.origPrice||0)-o.price),0);
+  const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
   const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
   const chipDefs = ['Alla'].concat(present);
   const chips = chipDefs.map(c=>{ const a=cat===c;
@@ -422,7 +402,7 @@ function viewOffers(){
       <div style="flex:1;">
         <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
         <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
-        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i Farsta-området</div>
+        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i Hägersten-området</div>
       </div>
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
@@ -432,9 +412,9 @@ function viewOffers(){
 function viewStores(){
   const cards = STORES.map(st=>{
     const items = deals.filter(o=>o.store===st.id);
-    const save = items.reduce((a,o)=>a+Math.max(0,(o.origPrice||0)-o.price),0);
+    const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
     const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
-      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}</span></div>`).join('');
+      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
     return { st, count:items.length, save, html:(st0)=>'' , top };
   }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>{
     return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
