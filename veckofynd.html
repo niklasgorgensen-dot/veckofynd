@@ -1,270 +1,234 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBF6EE">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="VeckoFynd">
-<title>VeckoFynd – Farsta</title>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>VeckoFynd</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { font-family: 'Nunito', sans-serif; background: #f4f6fb; min-height: 100vh; max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
-  button { font-family: 'Nunito', sans-serif; cursor: pointer; }
-  input, select { font-family: 'Nunito', sans-serif; }
-  ::-webkit-scrollbar { display: none; }
-
-  #header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%); padding: 20px 16px 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-  #header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  #app-title { color: #ffd700; font-weight: 900; font-size: 22px; letter-spacing: -0.5px; }
-  #app-subtitle { color: rgba(255,255,255,0.6); font-size: 12px; font-weight: 600; }
-  #list-btn { border: none; border-radius: 12px; padding: 8px 14px; font-weight: 800; font-size: 15px; background: rgba(255,255,255,0.15); color: white; }
-  #list-btn.has-items { background: #ffd700; color: #1a1a2e; }
-  #search { width: 100%; padding: 10px 14px; border-radius: 12px; border: none; background: rgba(255,255,255,0.12); color: white; font-size: 14px; outline: none; }
-  #search::placeholder { color: rgba(255,255,255,0.5); }
-
-  #nav { display: flex; background: #1a1a2e; padding: 0 8px; gap: 4px; }
-  .nav-btn { flex: 1; padding: 10px 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-weight: 800; font-size: 12px; border-bottom: 3px solid transparent; }
-  .nav-btn.active { color: #ffd700; border-bottom: 3px solid #ffd700; }
-
-  .scroll-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-
-  .top-card { flex: 0 0 148px; background: white; border-radius: 16px; padding: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-  .top-card .discount-badge { background: #ff3b3b; color: white; font-weight: 900; font-size: 11px; border-radius: 8px; padding: 2px 6px; }
-  .top-card .product-name { font-weight: 800; font-size: 13px; color: #1a1a2e; line-height: 1.2; margin-bottom: 2px; }
-  .top-card .product-detail { font-size: 11px; color: #888; margin-bottom: 6px; }
-  .top-card .sale-price { font-weight: 900; font-size: 17px; }
-  .top-card .orig-price { font-size: 11px; color: #bbb; text-decoration: line-through; }
-  .top-card .store-label { font-size: 10px; font-weight: 800; margin-top: 4px; }
-
-  .pill { flex: 0 0 auto; padding: 6px 13px; border-radius: 20px; border: none; background: #e8ecf3; color: #555; font-weight: 700; font-size: 12px; }
-  .pill.active { background: #1a1a2e; color: white; }
-  .store-pill { flex: 0 0 auto; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 11px; border: 2px solid #ddd; background: white; color: #aaa; }
-
-  .sort-btn { padding: 4px 10px; border-radius: 12px; border: none; background: #e8ecf3; color: #555; font-weight: 700; font-size: 11px; }
-  .sort-btn.active { background: #0f3460; color: white; }
-
-  .deal-card { background: white; border-radius: 16px; padding: 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-  .deal-emoji { font-size: 32px; flex-shrink: 0; }
-  .deal-info { flex: 1; min-width: 0; }
-  .deal-name { font-weight: 800; font-size: 14px; color: #1a1a2e; }
-  .hot-badge { background: #ff3b3b; color: white; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 1px 5px; }
-  .deal-detail { font-size: 12px; color: #888; margin: 2px 0; }
-  .deal-prices { display: flex; align-items: center; gap: 8px; }
-  .deal-sale { font-weight: 900; font-size: 16px; }
-  .deal-orig { font-size: 12px; color: #bbb; text-decoration: line-through; }
-  .pct-badge { background: #ff3b3b; color: white; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 1px 6px; }
-  .deal-store { font-size: 11px; font-weight: 700; margin-top: 2px; }
-  .add-btn { border: none; border-radius: 12px; width: 36px; height: 36px; font-size: 17px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f0f4ff; }
-  .add-btn.in-list { background: #e8f5e9; }
-  .cheapest-badge { display:inline-block; background:#e8f5e9; color:#1b7a35; font-size:10px; font-weight:800; border-radius:6px; padding:1px 6px; margin-top:3px; }
-  .cheaper-elsewhere { display:inline-block; color:#ff6b00; font-size:11px; font-weight:800; margin-top:3px; }
-  .limited-badge { font-size:11px; font-weight:800; color:#ff6b00; margin:2px 0; }
-
-  .store-card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
-  .store-link { display: block; margin-top: 10px; text-align: center; border-radius: 10px; padding: 8px; font-weight: 800; font-size: 13px; text-decoration: none; }
-
-  .qty-stepper { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-  .qty-btn { width:26px; height:26px; border-radius:8px; border:none; background:#eef1f7; color:#1a1a2e; font-weight:900; font-size:16px; display:flex; align-items:center; justify-content:center; line-height:1; }
-  .qty-num { font-weight:800; font-size:15px; min-width:18px; text-align:center; }
-
-  .seg { display:flex; background:#eef1f7; border-radius:12px; padding:3px; gap:3px; }
-  .seg button { flex:1; border:none; background:none; padding:7px; border-radius:9px; font-weight:800; font-size:13px; color:#888; }
-  .seg button.active { background:white; color:#1a1a2e; box-shadow:0 1px 4px rgba(0,0,0,0.1); }
-
-  #modal-overlay, #custom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: none; align-items: flex-end; }
-  #modal-overlay.open, #custom-overlay.open { display: flex; }
-  #modal, #custom-modal { background: white; border-radius: 24px 24px 0 0; padding: 20px; width: 100%; max-height: 85vh; overflow-y: auto; }
-  .form-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 2px solid #e8ecf3; font-size: 14px; outline: none; background: #f8faff; }
-  .form-label { font-size: 12px; font-weight: 700; color: #666; margin-bottom: 4px; display: block; }
-
-  .tip-box { background: #fff9e6; border-radius: 14px; padding: 12px; border: 1.5px solid #ffd700; font-size: 12px; color: #7a6000; font-weight: 700; line-height: 1.6; }
-
-  .view { padding: 12px 12px 0; }
-  .section-title { font-weight: 900; font-size: 15px; color: #1a1a2e; margin-bottom: 8px; }
-  .empty-state { text-align: center; padding: 48px 16px; color: #ccc; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{background:#FBF6EE;font-family:'Hanken Grotesk',sans-serif;color:#2A211A;-webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;}
+  .vf-sc::-webkit-scrollbar{height:0;width:0;display:none;}
+  .vf-sc{scrollbar-width:none;}
+  input,select{font-family:inherit;}
+  @keyframes vfSheet{from{transform:translateY(28px);opacity:0}to{transform:translateY(0);opacity:1}}
+  @keyframes vfFade{from{opacity:0}to{opacity:1}}
 </style>
 </head>
 <body>
-
-<!-- Header -->
-<div id="header">
-  <div id="header-top">
-    <div>
-      <div id="app-title">🛒 VeckoFynd</div>
-      <div id="app-subtitle">Farsta-området</div>
-    </div>
-    <button id="list-btn" onclick="setView('list')">🧾 <span id="list-count"></span></button>
-  </div>
-  <input id="search" placeholder="🔍 Sök produkt..." oninput="render()">
-</div>
-
-<!-- Nav -->
-<div id="nav">
-  <button class="nav-btn active" id="nav-deals" onclick="setView('deals')">🏷️ Erbjudanden</button>
-  <button class="nav-btn" id="nav-stores" onclick="setView('stores')">🏪 Butiker</button>
-  <button class="nav-btn" id="nav-list" onclick="setView('list')">📋 Inköpslista</button>
-</div>
-
-<!-- Views -->
-<div id="view-deals" class="view"></div>
-<div id="view-stores" class="view" style="display:none"></div>
-<div id="view-list" style="padding:12px;display:none"></div>
-
-<!-- Add deal modal -->
-<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
-  <div id="modal">
-    <div style="font-weight:900;font-size:18px;color:#1a1a2e;margin-bottom:16px">✏️ Lägg till erbjudande</div>
-    <div style="margin-bottom:12px"><label class="form-label">Butik</label>
-      <select id="f-store" class="form-input"></select></div>
-    <div style="margin-bottom:12px"><label class="form-label">Produkt</label>
-      <input id="f-product" class="form-input" placeholder="T.ex. Fläskfilé"></div>
-    <div style="margin-bottom:12px"><label class="form-label">Detaljer</label>
-      <input id="f-detail" class="form-input" placeholder="T.ex. Per kg, 800g förp"></div>
-    <div style="margin-bottom:12px"><label class="form-label">Kategori</label>
-      <select id="f-cat" class="form-input"></select></div>
-    <div style="margin-bottom:12px"><label class="form-label">Rea-pris (kr)</label>
-      <input id="f-price" class="form-input" type="number" placeholder="79"></div>
-    <div style="margin-bottom:12px"><label class="form-label">Ordinarie pris (kr)</label>
-      <input id="f-orig" class="form-input" type="number" placeholder="129"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button onclick="closeModal()" style="flex:1;padding:12px;background:#eee;border:none;border-radius:14px;font-weight:700;font-size:14px">Avbryt</button>
-      <button onclick="addDeal()" style="flex:2;padding:12px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;border:none;border-radius:14px;font-weight:800;font-size:14px">✅ Lägg till</button>
-    </div>
-  </div>
-</div>
-
-<!-- Add custom item modal -->
-<div id="custom-overlay" onclick="if(event.target===this)closeCustomModal()">
-  <div id="custom-modal">
-    <div style="font-weight:900;font-size:18px;color:#1a1a2e;margin-bottom:4px">🛒 Lägg till egen vara</div>
-    <div style="font-size:12px;color:#888;margin-bottom:16px">För saker som inte är på rea, t.ex. mjölk eller bröd</div>
-    <div style="margin-bottom:12px"><label class="form-label">Vara</label>
-      <input id="c-product" class="form-input" placeholder="T.ex. Mjölk"></div>
-    <div style="margin-bottom:12px"><label class="form-label">Butik</label>
-      <select id="c-store" class="form-input"></select></div>
-    <div style="margin-bottom:12px"><label class="form-label">Kategori</label>
-      <select id="c-cat" class="form-input"></select></div>
-    <div style="margin-bottom:12px"><label class="form-label">Antal</label>
-      <input id="c-qty" class="form-input" type="number" value="1" min="1"></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button onclick="closeCustomModal()" style="flex:1;padding:12px;background:#eee;border:none;border-radius:14px;font-weight:700;font-size:14px">Avbryt</button>
-      <button onclick="addCustomItem()" style="flex:2;padding:12px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;border:none;border-radius:14px;font-weight:800;font-size:14px">✅ Lägg till på listan</button>
-    </div>
-  </div>
-</div>
-
+<div id="app"></div>
 <script>
-// ── Supabase via fetch ────────────────────────────────
+// ── Supabase ──────────────────────────────────────────────
 const SUPA_URL = 'https://ihyolgjmppzgxhifhooh.supabase.co';
 const SUPA_KEY = 'sb_publishable_rm6yWqFKFiFR3dGaIPnV5w_6r0Jbsx4';
 const SUPA_HEAD = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' };
-
 const supa = {
-  async selectRaw(path) {
-    const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: SUPA_HEAD });
-    return r.json();
-  },
-  async delete(table, id) {
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method: 'DELETE', headers: SUPA_HEAD });
-  },
-  async deleteAll(table) {
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=neq.0`, { method: 'DELETE', headers: SUPA_HEAD });
-  },
-  async update(table, id, data) {
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method: 'PATCH', headers: { ...SUPA_HEAD, Prefer: 'return=minimal' }, body: JSON.stringify(data) });
-  },
-  async insert(table, row) {
-    return fetch(`${SUPA_URL}/rest/v1/${table}`, { method: 'POST', headers: { ...SUPA_HEAD, Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(row) });
-  }
+  async selectRaw(path){ const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: SUPA_HEAD }); return r.json(); },
+  async delete(table, id){ await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'DELETE', headers: SUPA_HEAD }); },
+  async update(table, id, data){ await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'PATCH', headers:{...SUPA_HEAD, Prefer:'return=minimal'}, body: JSON.stringify(data) }); },
+  async insert(table, row){ return fetch(`${SUPA_URL}/rest/v1/${table}`, { method:'POST', headers:{...SUPA_HEAD, Prefer:'resolution=merge-duplicates'}, body: JSON.stringify(row) }); }
 };
+let lastLocalWrite = 0, lastDataHash = '';
+function markWrite(){ lastLocalWrite = Date.now(); }
 
-let lastLocalWrite = 0;
-let lastDataHash = '';
-
-function markWrite() { lastLocalWrite = Date.now(); }
-
-async function loadShoppingList() {
-  // Don't overwrite local optimistic changes right after a write
-  if (Date.now() - lastLocalWrite < 3500) return;
-  try {
-    const data = await supa.selectRaw('shopping_list?select=*');
-    if (!Array.isArray(data)) return;
-    const hash = JSON.stringify(data.map(r => [r.id, r.checked, r.qty]).sort());
-    if (hash === lastDataHash) return; // nothing changed, skip re-render
-    lastDataHash = hash;
-    shoppingList = data.map(r => ({
-      id: r.id, store: r.store, product: r.product, detail: r.detail,
-      price: r.price, origPrice: r.orig_price, unit: r.unit,
-      category: r.category, emoji: r.emoji, checked: r.checked,
-      qty: r.qty || 1, isCustom: r.is_custom || false,
-    }));
-    render();
-  } catch(e) { console.log('Load error', e); }
-}
-
-async function saveToSupabase(item) {
-  const full = {
-    id: item.id, store: item.store, product: item.product, detail: item.detail,
-    price: item.price, orig_price: item.origPrice, unit: item.unit,
-    category: item.category, emoji: item.emoji, checked: item.checked || false,
-    qty: item.qty || 1, is_custom: item.isCustom || false,
-  };
-  let r = await supa.insert('shopping_list', full);
-  if (!r.ok) {
-    // Fallback if qty/is_custom columns don't exist yet (migration not run)
-    const { qty, is_custom, ...basic } = full;
-    r = await supa.insert('shopping_list', basic);
-    if (!r.ok) { const t = await r.text(); console.error('Save error', r.status, t); }
-  }
-}
-
-// ── Stores & Deals ────────────────────────────────────
+// ── Data (riktig) ─────────────────────────────────────────
 const STORES = [
-  { id:"hemkop",    name:"Hemköp Farsta",            color:"#007A3D", logo:"🟢", address:"Farstavägen 26-28, Farsta",   distance:"0.4 km", hours:"07–22", url:"https://www.hemkop.se/erbjudanden" },
-  { id:"coop",      name:"Coop Farsta",              color:"#00529B", logo:"🔵", address:"Farstaplan 21, Farsta",       distance:"0.5 km", hours:"07–22", url:"https://www.coop.se/butiker-erbjudanden/coop/coop-farsta/" },
-  { id:"matdax",    name:"MatDax Hökarängen",        color:"#FF6B00", logo:"🟠", address:"Pepparvägen 5, Hökarängen",   distance:"1.8 km", hours:"07–22", url:"https://www.matdax.se/erbjudanden/" },
-  { id:"willys",    name:"Willys Skörndal",          color:"#E4002B", logo:"🟥", address:"Sköndalsvägen 7, Skörndal",   distance:"2.5 km", hours:"07–21", url:"https://www.willys.se/erbjudanden" },
-  { id:"icamaxi",   name:"Maxi ICA Stormarknad Haninge", color:"#E2011A", logo:"🔴", address:"Österport 4, Haninge",       distance:"~13 km", hours:"07–22", url:"https://www.ica.se/erbjudanden/maxi-ica-stormarknad-haninge-1003777/" },
+  { id:"ica",       name:"ICA Supermarket Telefonplan", color:"#E2231A", logo:"🔴", address:"Tellusborgsvägen 87, Hägersten",  distance:"1.2 km", hours:"07–23", url:"https://www.ica.se/butiker/supermarket/hagersten/ica-supermarket-telefonplan-1004018/erbjudanden/" },
+  { id:"coop",      name:"Stora Coop Västberga",        color:"#00529B", logo:"🔵", address:"Västbergavägen 4, Hägersten",   distance:"1.3 km", hours:"07–23", url:"https://www.coop.se/butiker-erbjudanden/coop/stora-coop-vastberga/" },
+  { id:"willys",    name:"Willys Älvsjö",                color:"#E4002B", logo:"🟥", address:"Älvsjö Ängsväg 2-6, Älvsjö",    distance:"2.6 km", hours:"07–22", url:"https://www.willys.se/erbjudanden" },
+  { id:"matdax",    name:"MatDax Hagsätra",              color:"#FF6B00", logo:"🟠", address:"Hagsätra torg 7-11, Bandhagen", distance:"3.8 km", hours:"07–22", url:"https://www.matdax.se/erbjudanden/" },
+  { id:"matvarlden",name:"Matvärlden Kungens Kurva",     color:"#7A4FBC", logo:"🟣", address:"Modulvägen 6, Kungens Kurva",   distance:"4.5 km", hours:"07–22", url:"" },
 ];
 
-const CATEGORIES = ["Allt","Kött","Kyckling","Fisk & Skaldjur","Pasta & Ris","Mejeri & Övrigt","Hem & Hushåll"];
-const CAT_EMOJI = { "Kött":"🥩","Kyckling":"🍗","Fisk & Skaldjur":"🐟","Pasta & Ris":"🍝","Mejeri & Övrigt":"🧀" };
-
 let deals = [
+  // ───────── ICA Supermarket Telefonplan – ica.se Vecka 27 ─────────
+  { id:901, store:"ica", product:"Läsk",                     detail:"Coca-Cola/Fanta/Sprite · 1,5L · +pant · 5 för 65 kr", price:13,    origPrice:13,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:true  },
+  { id:902, store:"ica", product:"Mozzarella",                detail:"Galbani · 125-150g · 2 för 25 kr",       price:12.50, origPrice:12.50, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:903, store:"ica", product:"Grillkorv",                 detail:"Scan · 270g/480-640g",                   price:35,    origPrice:35,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
+  { id:904, store:"ica", product:"Halländskt bondbröd",       detail:"ICA Selection · 1kg",                    price:30,    origPrice:30,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:905, store:"ica", product:"Kaffe",                     detail:"Löfbergs · 450g · 3 för 149 kr · Max 1", price:49.67, origPrice:49.67, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
+  { id:906, store:"ica", product:"Fryst kryddad kyckling",    detail:"Guldfågeln · Sverige · 480-760g · 2 för 140 kr · Max 1", price:70, origPrice:70, unit:"st", category:"Kyckling", emoji:"🍗", hot:true  },
+  { id:907, store:"ica", product:"Kex",                       detail:"Ballerina/Singoalla/Brago, Göteborgs · 175-225g · 2 för 30 kr", price:15, origPrice:15, unit:"st", category:"Mejeri & Övrigt", emoji:"🍪", hot:false },
+  { id:908, store:"ica", product:"Herrgård/Präst/Grevé",      detail:"Arla · ca 700g",                         price:79,    origPrice:79,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:909, store:"ica", product:"Pizza Ristorante",          detail:"Dr. Oetker · 280-360g · 2 för 55 kr",    price:27.50, origPrice:27.50, unit:"st", category:"Pasta & Ris", emoji:"🍕", hot:false },
+  { id:910, store:"ica", product:"Mjukost i tub",             detail:"Kavli · 230-275g · 2 för 65 kr · Max 1", price:32.50, origPrice:32.50, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:911, store:"ica", product:"Färskost",                  detail:"ICA · 200g · 2 för 30 kr",               price:15,    origPrice:15,    unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:912, store:"ica", product:"Skärgårdskaka",             detail:"Pågen · 750g",                           price:25,    origPrice:25,    unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:913, store:"ica", product:"Äggnudlar",                 detail:"ICA · 250g · 4 för 30 kr",               price:7.50,  origPrice:7.50,  unit:"st", category:"Pasta & Ris", emoji:"🍜", hot:false },
+  { id:914, store:"ica", product:"Fyllda baguetter",          detail:"ICA · 208-245g",                         price:32,    origPrice:32,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥖", hot:false },
+  { id:915, store:"ica", product:"Majs 3-pack",               detail:"ICA · 3x198g · 2 för 40 kr",             price:20,    origPrice:20,    unit:"st", category:"Mejeri & Övrigt", emoji:"🌽", hot:false },
+  { id:916, store:"ica", product:"Karré med ben",             detail:"ICA · Sverige · ca 1000g · Max 2",       price:75,    origPrice:75,    unit:"kg", category:"Kött", emoji:"🥩", hot:true  },
+  { id:917, store:"ica", product:"Salami",                    detail:"Göl · 125-150g · 2 för 42 kr",           price:21,    origPrice:21,    unit:"st", category:"Kött", emoji:"🍕", hot:false },
+  { id:918, store:"ica", product:"Färska korvar",              detail:"ICA Selection · Sverige · 300g",         price:35,    origPrice:35,    unit:"st", category:"Kött", emoji:"🌭", hot:false },
+  { id:919, store:"ica", product:"Grillskivor av picnicbog",   detail:"ICA · Sverige · ca 800g",                price:79,    origPrice:79,    unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  // ───────── Stora Coop Västberga – coop.se reklamblad Vecka 27 ─────────
+  { id:301, store:"coop", product:"Nektariner i korg",       detail:"Spanien/Italien · 1kg · Klass 1",        price:25,    origPrice:25,    unit:"kg",  category:"Mejeri & Övrigt", emoji:"🍑", hot:false },
+  { id:302, store:"coop", product:"Ketchup/senap",           detail:"Felix · 360-500g",                       price:15,    origPrice:15,    unit:"st",  category:"Pasta & Ris", emoji:"🍅", hot:false },
+  { id:303, store:"coop", product:"Färsk fläskytterfilé",    detail:"Sverige/Scan · ca 1kg · Max 2",          price:69.90, origPrice:69.90, unit:"kg",  category:"Kött", emoji:"🥩", hot:true  },
+  { id:304, store:"coop", product:"Fetaost",                 detail:"Coop · 150g · 2 för 35 kr",              price:17.50, origPrice:17.50, unit:"st",  category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:305, store:"coop", product:"Potatissallad",           detail:"Rydbergs · 750-800g, original/texmex",   price:25,    origPrice:25,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🥗", hot:false },
+  { id:306, store:"coop", product:"Färsk entrecôte/biff",    detail:"Brasilien/Naturkött · ca 850-950g · Max 2", price:179, origPrice:179,  unit:"kg",  category:"Kött", emoji:"🥩", hot:true  },
+  { id:307, store:"coop", product:"Färdigrätter",            detail:"Findus · 340-400g, dagens",              price:23.25, origPrice:23.25, unit:"st",  category:"Mejeri & Övrigt", emoji:"🍽️", hot:false },
+  { id:308, store:"coop", product:"Klassikerost",            detail:"Sverige/Arla · ca 667-1500g, 28-36% · Max 2", price:79, origPrice:79,  unit:"kg",  category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:309, store:"coop", product:"Soppa",                   detail:"Kelda · 5dl · 2 för 45 kr",              price:22.50, origPrice:22.50, unit:"st",  category:"Mejeri & Övrigt", emoji:"🍲", hot:false },
+  { id:310, store:"coop", product:"Cornflakes",              detail:"Coop · 500g",                            price:20,    origPrice:20,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🥣", hot:false },
+  { id:311, store:"coop", product:"Kycklingfilé",            detail:"Sverige/Guldfågeln · 2kg, fryst",        price:165,   origPrice:165,   unit:"st",  category:"Kyckling", emoji:"🍗", hot:false },
+  { id:312, store:"coop", product:"Glass flerpack",          detail:"Triumf Glass · 4-21 pack · 2 för 65 kr", price:32.50, origPrice:32.50, unit:"st",  category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
+  { id:313, store:"coop", product:"Bacon",                   detail:"Tulip/Majesty · 375-500g",               price:35,    origPrice:35,    unit:"st",  category:"Kött", emoji:"🥓", hot:false },
+  { id:314, store:"coop", product:"BBQ-ribs",                detail:"Sverige/Coop · 500g, chili/BBQ",         price:49.90, origPrice:49.90, unit:"st",  category:"Kött", emoji:"🍖", hot:false },
+  { id:315, store:"coop", product:"Smoothie",                detail:"Coop · 250ml · 2 för 28 kr · +pant",     price:14,    origPrice:14,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
+  { id:316, store:"coop", product:"Lök i knippe",            detail:"Sverige · 250g · 2 för 30 kr",           price:15,    origPrice:15,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🧅", hot:false },
+  { id:317, store:"coop", product:"Pan pizza/piroger",       detail:"Billys/Gorbys · 140-170g · 3 för 34 kr", price:11.33, origPrice:11.33, unit:"st",  category:"Pasta & Ris", emoji:"🥟", hot:false },
+  { id:318, store:"coop", product:"Tomat delikata",          detail:"Belgien · 170g, Klass 1",                price:25,    origPrice:25,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
+  { id:319, store:"coop", product:"Kalkonfilé",              detail:"Sverige/Ingelsta Kalkon · 400g",         price:76,    origPrice:76,    unit:"st",  category:"Kyckling", emoji:"🦃", hot:false },
+  { id:320, store:"coop", product:"Smörgåspålägg",           detail:"Pärsons · 150-200g · 2 för 53 kr",       price:26.50, origPrice:26.50, unit:"st",  category:"Mejeri & Övrigt", emoji:"🥪", hot:false },
+  { id:321, store:"coop", product:"Olivolja",                detail:"Xtra · 1000ml",                          price:59,    origPrice:59,    unit:"st",  category:"Pasta & Ris", emoji:"🫒", hot:false },
+  { id:322, store:"coop", product:"Färskkorv",                detail:"Sverige/Rydbergs Charkuteri · 320g",     price:37.90, origPrice:37.90, unit:"st",  category:"Kött", emoji:"🌭", hot:false },
+  { id:323, store:"coop", product:"Fish & Crisp/Fish nuggets", detail:"Findus · 480-490g · 2 för 95 kr",      price:47.50, origPrice:47.50, unit:"st",  category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:324, store:"coop", product:"Salsiccia",                detail:"Nonna Elide · 300g, gluten-/laktosfri", price:38,    origPrice:38,    unit:"st",  category:"Kött", emoji:"🌭", hot:false },
+  { id:325, store:"coop", product:"Kvarg",                    detail:"Lindahls · 150g",                       price:15,    origPrice:15,    unit:"st",  category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  // ───────── Matvärlden Kungens Kurva – reklamblad (29/6–5/7 2026), läst från foto ─────────
+  { id:801, store:"matvarlden", product:"Bogblad/Topblade",     detail:"Färska, av nöt, halal · Namibia", price:149.95, origPrice:149.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:802, store:"matvarlden", product:"Fårstek",               detail:"Fryst, halal · Island · ca 3kg",  price:99.95, origPrice:99.95, unit:"kg", category:"Kött", emoji:"🍖", hot:false },
+  { id:803, store:"matvarlden", product:"Kycklingbröstfilé",     detail:"Färsk, halal · ca 0,8-1kg · Lettland", price:89.95, origPrice:89.95, unit:"kg", category:"Kyckling", emoji:"🍗", hot:true },
+  { id:804, store:"matvarlden", product:"Kvisttomater",          detail:"Holland · Klass 1",              price:14.95, origPrice:14.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
+  { id:805, store:"matvarlden", product:"Cevapcici",             detail:"Brajlovic/Banja Luka · 800g, fryst", price:129.95, origPrice:129.95, unit:"förp", category:"Kött", emoji:"🌭", hot:false },
+  { id:806, store:"matvarlden", product:"Hel vattenmelon",       detail:"Turkiet · Klass 1",              price:14.95, origPrice:14.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍉", hot:false },
+  { id:807, store:"matvarlden", product:"Adana kebabspett/Manti/Grillkebab", detail:"Ekselans · 500-700g, frysta", price:59.95, origPrice:59.95, unit:"förp", category:"Kött", emoji:"🍢", hot:false },
+  { id:808, store:"matvarlden", product:"Kycklingklubbor",        detail:"Danpo · 1,5kg, frysta · Matvärlden VIP", price:39.95, origPrice:39.95, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false, limitedDays:"fre–sön" },
+  { id:809, store:"matvarlden", product:"Hel kyckling",           detail:"Qualiko · 900g, fryst · 5 för 100 kr", price:20, origPrice:20, unit:"st", category:"Kyckling", emoji:"🍗", hot:true, limitedDays:"mån–tis" },
+  { id:810, store:"matvarlden", product:"Helt lamm",              detail:"Färskt, halal · Sverige · ca 18-24kg", price:139.95, origPrice:139.95, unit:"kg", category:"Kött", emoji:"🐑", hot:false, limitedDays:"mån–tis" },
+  { id:811, store:"matvarlden", product:"Vannameiräkor",          detail:"EBI · 1kg, frysta · storlek 100/200 · Max 5/hushåll", price:79.95, origPrice:79.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🦐", hot:false, limitedDays:"ons–tors" },
+  { id:812, store:"matvarlden", product:"Ceylonte",               detail:"Colombo · 1kg",                  price:84.95, origPrice:84.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍵", hot:false, limitedDays:"ons–tors" },
+  { id:813, store:"matvarlden", product:"Strösocker",             detail:"Ella's · 1kg · 3 för 25 kr",     price:8.33, origPrice:8.33, unit:"st", category:"Mejeri & Övrigt", emoji:"🧂", hot:false, limitedDays:"fre–sön" },
+  { id:814, store:"matvarlden", product:"Strimlad kyckling",      detail:"Sultan · 2kg, fryst",            price:179.95, origPrice:179.95, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false, limitedDays:"fre–sön" },
+  { id:815, store:"matvarlden", product:"Makrill",                detail:"Färsk · fångad i Biscayabukten", price:99.95, origPrice:99.95, unit:"kg", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:816, store:"matvarlden", product:"Revben",                 detail:"Färska, av gris · Sverige, Scan · ca 1,1kg", price:49.95, origPrice:49.95, unit:"kg", category:"Kött", emoji:"🍖", hot:true },
+  { id:817, store:"matvarlden", product:"Kalkonben/vingar",       detail:"Garden Food · ca 300-400g, frysta · Max 5/hushåll", price:29.95, origPrice:29.95, unit:"kg", category:"Kyckling", emoji:"🦃", hot:false },
+  { id:818, store:"matvarlden", product:"Turkisk yoghurt",        detail:"Yörem · 1kg, 3,8% fett",         price:17.95, origPrice:17.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:819, store:"matvarlden", product:"Diskmedel",              detail:"Cif · 2 liter",                  price:34.95, origPrice:34.95, unit:"förp", category:"Hem & Hushåll", emoji:"🧴", hot:false },
+  { id:820, store:"matvarlden", product:"Hel baguette",           detail:"Eget bageri · ca 400g",          price:9.95, origPrice:9.95, unit:"st", category:"Mejeri & Övrigt", emoji:"🥖", hot:false },
+  { id:821, store:"matvarlden", product:"Chips",                  detail:"Lay's · 175-185g, olika sorter", price:19.95, origPrice:19.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍟", hot:false },
+  { id:822, store:"matvarlden", product:"Blomkål",                detail:"Sverige · Klass 1",              price:14.95, origPrice:14.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🥦", hot:false },
+  { id:823, store:"matvarlden", product:"Ananas Jumbo",           detail:"Costa Rica · Klass 1",           price:10.95, origPrice:10.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍍", hot:false },
+  { id:824, store:"matvarlden", product:"Sudjuk Premium",         detail:"Plivit · ca 450g, nötkött",      price:89.95, origPrice:89.95, unit:"förp", category:"Kött", emoji:"🌭", hot:false },
+  { id:825, store:"matvarlden", product:"Kaffe",                  detail:"Zlatna Dzezva · 500g",           price:69.95, origPrice:69.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
+  { id:826, store:"matvarlden", product:"Somunbröd",              detail:"Plivit · 400g, frysta",          price:14.95, origPrice:14.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🫓", hot:false },
+  { id:827, store:"matvarlden", product:"Ajvar mild/stark",       detail:"Podravka · 350g",                price:19.95, origPrice:19.95, unit:"förp", category:"Pasta & Ris", emoji:"🫙", hot:false },
+  { id:828, store:"matvarlden", product:"Ugnsgrillad paprika",    detail:"Plivit · 680g",                  price:22.95, origPrice:22.95, unit:"förp", category:"Pasta & Ris", emoji:"🫑", hot:false },
+  { id:829, store:"matvarlden", product:"Jordnötsbågar",          detail:"Smoki, Soko Stark · 225g",       price:19.95, origPrice:19.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥜", hot:false },
+  // ───────── MatDax Hagsätra – reklamblad v27 (29/6–5/7 2026), läst från foto ─────────
+  { id:701, store:"matdax", product:"Präst-/Herrgårdsost lagrad", detail:"Allerum · ca 375g",        price:29.95, origPrice:29.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:702, store:"matdax", product:"Kycklingfilé",            detail:"Flevogold · 800g",            price:39.95, origPrice:39.95, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false },
+  { id:703, store:"matdax", product:"Penne & Fusilli",         detail:"Monte Castello · 500g",       price:5,     origPrice:5,     unit:"förp", category:"Pasta & Ris", emoji:"🍝", hot:false },
+  { id:704, store:"matdax", product:"Kallpressad juice apelsin", detail:"Råsaft · 700ml · +pant",    price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧃", hot:false },
+  { id:705, store:"matdax", product:"Passerade tomater",       detail:"Tage Lindblom · 1kg",         price:10,    origPrice:10,    unit:"förp", category:"Pasta & Ris", emoji:"🍅", hot:false },
+  { id:706, store:"matdax", product:"Dillgurka",               detail:"Krakus · 670g",               price:10,    origPrice:10,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥒", hot:false },
+  { id:707, store:"matdax", product:"Energidryck Summer Vibe", detail:"Celsius · 355ml · +pant",     price:10,    origPrice:10,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
+  { id:708, store:"matdax", product:"Coca-Cola Original/Zero", detail:"2 liter · +pant",             price:15,    origPrice:15,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
+  { id:709, store:"matdax", product:"Babyplommontomat",        detail:"Spanien · 250g · Max 4",      price:5,     origPrice:5,     unit:"förp", category:"Mejeri & Övrigt", emoji:"🍅", hot:false, limitedDays:"mån–tis 29–30/6" },
+  { id:710, store:"matdax", product:"Pitabröd",                detail:"Dalarnas · 240g · Max 8",     price:5,     origPrice:5,     unit:"förp", category:"Mejeri & Övrigt", emoji:"🫓", hot:false, limitedDays:"mån–tis 29–30/6" },
+  { id:711, store:"matdax", product:"Keso naturell",           detail:"Arla · 500g · Max 4",         price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false, limitedDays:"mån–tis 29–30/6" },
+  { id:712, store:"matdax", product:"Färska jordgubbar",       detail:"Belgien · Max 4 liter",       price:25,    origPrice:25,    unit:"liter", category:"Mejeri & Övrigt", emoji:"🍓", hot:true, limitedDays:"mån–tis 29–30/6" },
+  { id:713, store:"matdax", product:"Chokladkaka Hallon/Saltlakris", detail:"Marabou · 160g · Max 4", price:10,  origPrice:10,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🍫", hot:false, limitedDays:"mån–tis 29–30/6" },
+  { id:714, store:"matdax", product:"Bryggkaffe mellanrost",   detail:"Gevalia · 450g · Max 4",      price:59.95, origPrice:59.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"☕", hot:false, limitedDays:"mån–tis 29–30/6" },
+  { id:715, store:"matdax", product:"Färdiga rätter",          detail:"Wallenbergare/Kycklingfilépasta, Carolines Kök · 400g · Max 4", price:29.95, origPrice:29.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍽️", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:716, store:"matdax", product:"Prästost mellanlagrad",   detail:"Skånemejerier · 670g · Max 4", price:29.95, origPrice:29.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:717, store:"matdax", product:"Fläskkarré benfri hel",   detail:"Tyskland · Max 4",            price:49.95, origPrice:49.95, unit:"kg", category:"Kött", emoji:"🥩", hot:true, limitedDays:"fre 3/7" },
+  { id:718, store:"matdax", product:"Bananer",                 detail:"Centralamerika · Max 4",      price:12.95, origPrice:12.95, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍌", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:719, store:"matdax", product:"Chokladask Collection",   detail:"Ferrero · 359g · Max 4",      price:89.95, origPrice:89.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍫", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:720, store:"matdax", product:"Ägg 30-pack",             detail:"Stjärnägg · Sverige · Max 4", price:59.95, origPrice:59.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥚", hot:false, limitedDays:"fre 3/7" },
+  { id:721, store:"matdax", product:"Färsk laxfilé",           detail:"Sweden Seafood · Salmo Salar, Norge · Max 4", price:119.95, origPrice:119.95, unit:"kg", category:"Fisk & Skaldjur", emoji:"🐟", hot:true, limitedDays:"fre 3/7" },
+  { id:722, store:"matdax", product:"Gyoza",                   detail:"Kyckling/Grönsaker, Twin Dragon · 600g · Max 4", price:29.95, origPrice:29.95, unit:"förp", category:"Pasta & Ris", emoji:"🥟", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:723, store:"matdax", product:"Snabbkaffe",              detail:"Gold Deluxe · 200g · Max 4",  price:45,    origPrice:45,    unit:"förp", category:"Mejeri & Övrigt", emoji:"☕", hot:false, limitedDays:"ons–tors 1–2/7" },
+  { id:724, store:"matdax", product:"Goldbears Sour",          detail:"Haribo · 2,2kg · Max 4",      price:49.95, origPrice:49.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍬", hot:false, limitedDays:"fre 3/7" },
+  { id:725, store:"matdax", product:"Jasminris",               detail:"Regal Thai · 5kg · Max 4",    price:69.95, origPrice:69.95, unit:"förp", category:"Pasta & Ris", emoji:"🍚", hot:false, limitedDays:"fre 3/7" },
+  { id:726, store:"matdax", product:"Räkor med skal 120+",     detail:"Ullmo · 1kg · Max 4",         price:69.95, origPrice:69.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🦐", hot:false, limitedDays:"fre 3/7" },
+  { id:727, store:"matdax", product:"Tonfisk loins",           detail:"Seasam · Max 4",              price:110,   origPrice:110,   unit:"kg", category:"Fisk & Skaldjur", emoji:"🐟", hot:false, limitedDays:"fre 3/7" },
+  { id:728, store:"matdax", product:"Svärdfiskstek",           detail:"1kg · Max 4",                 price:149,   origPrice:149,   unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false, limitedDays:"fre 3/7" },
+  { id:729, store:"matdax", product:"Pepsi Regular",           detail:"50cl · +pant · Max 4",        price:5,     origPrice:5,     unit:"förp", category:"Mejeri & Övrigt", emoji:"🥤", hot:false, limitedDays:"fre 3/7" },
+  { id:730, store:"matdax", product:"Kycklingfilé färdiggrillad strimlad", detail:"Pure Poultry · 2,5kg · Max 4", price:149, origPrice:149, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false, limitedDays:"fre 3/7" },
+  { id:731, store:"matdax", product:"Hel kyckling",            detail:"Qualiko · 1kg · Max 4",       price:25,    origPrice:25,    unit:"förp", category:"Kyckling", emoji:"🍗", hot:true, limitedDays:"lör–sön 4–5/7" },
+  { id:732, store:"matdax", product:"Tilapia",                 detail:"Garden Food · 800/1000g · Max 4", price:25, origPrice:25,   unit:"kg", category:"Fisk & Skaldjur", emoji:"🐟", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:733, store:"matdax", product:"Pink Lemonade",           detail:"God Morgon · 1 liter · Max 4", price:15,   origPrice:15,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🍋", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:734, store:"matdax", product:"Torpedoräkor",            detail:"Seasam · 800g · Max 4",       price:69.95, origPrice:69.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🦐", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:735, store:"matdax", product:"Solrosolja",              detail:"Alwaid · 5 liter · Max 4",    price:79.95, origPrice:79.95, unit:"förp", category:"Pasta & Ris", emoji:"🛢️", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:736, store:"matdax", product:"Valnötskärnor",           detail:"Lösvikt · Max 4kg",           price:79.50, origPrice:79.50, unit:"kg", category:"Mejeri & Övrigt", emoji:"🥜", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:737, store:"matdax", product:"Cashewnötter",            detail:"Lösvikt · Max 4kg",           price:119.50, origPrice:119.50, unit:"kg", category:"Mejeri & Övrigt", emoji:"🥜", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:738, store:"matdax", product:"Pistagenötter",           detail:"Lösvikt · Max 4kg",           price:139.50, origPrice:139.50, unit:"kg", category:"Mejeri & Övrigt", emoji:"🥜", hot:false, limitedDays:"lör–sön 4–5/7" },
+  { id:739, store:"matdax", product:"Laxkotlett regnbåge",     detail:"Compass · 800g",              price:49.95, origPrice:49.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:740, store:"matdax", product:"Laxbitar",                detail:"KM Gross · 400g",             price:49.95, origPrice:49.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:741, store:"matdax", product:"Laxfiléer",                detail:"Julles · 400g",               price:59.95, origPrice:59.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:742, store:"matdax", product:"Vannameiräkor råa skalade", detail:"Garden Food · 800g",        price:79.95, origPrice:79.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🦐", hot:false },
+  { id:743, store:"matdax", product:"Vannameiräkor med skal ASC", detail:"Garden Food · 800g",       price:89.95, origPrice:89.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🦐", hot:false },
+  { id:744, store:"matdax", product:"Kalkonben",                detail:"Garden Food",                price:29.95, origPrice:29.95, unit:"kg", category:"Kyckling", emoji:"🦃", hot:false },
+  { id:745, store:"matdax", product:"Kycklingben",              detail:"Garden Food · 2kg",           price:49.95, origPrice:49.95, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false },
+  { id:746, store:"matdax", product:"Tonfiskstek",              detail:"Ullmo · 500g",                price:79.95, origPrice:79.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:747, store:"matdax", product:"Pangasiusfilé",            detail:"Garden Food · 800g",          price:29.95, origPrice:29.95, unit:"förp", category:"Fisk & Skaldjur", emoji:"🐟", hot:false },
+  { id:748, store:"matdax", product:"Kebabkött av nöt",         detail:"Saray · 700g",                price:69.95, origPrice:69.95, unit:"förp", category:"Kött", emoji:"🥙", hot:false },
+  { id:749, store:"matdax", product:"Hel bläckfisk",            detail:"Miramar · 1kg",               price:99,    origPrice:99,    unit:"förp", category:"Fisk & Skaldjur", emoji:"🦑", hot:false },
+  { id:750, store:"matdax", product:"Cevapcici",                detail:"Saray · 800g",                price:69.95, origPrice:69.95, unit:"förp", category:"Kött", emoji:"🌭", hot:false },
+  { id:751, store:"matdax", product:"Glass Gammaldags Vanilj",  detail:"GB · 1,8 liter",              price:35,    origPrice:35,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
+  { id:752, store:"matdax", product:"Isbergssallad",            detail:"Sverige",                     price:15,    origPrice:15,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🥬", hot:false },
+  { id:753, store:"matdax", product:"Kvisttomater",             detail:"Holland",                     price:20,    origPrice:20,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
+  { id:754, store:"matdax", product:"Jättefranska",             detail:"Pågen · 1100g",               price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:755, store:"matdax", product:"Müslimorgon",              detail:"Fazer · 600g",                price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥣", hot:false },
+  { id:756, store:"matdax", product:"Mango",                    detail:"Brasilien",                   price:10,    origPrice:10,    unit:"st", category:"Mejeri & Övrigt", emoji:"🥭", hot:false },
+  { id:757, store:"matdax", product:"Blomkål",                  detail:"Sverige",                     price:25,    origPrice:25,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🥦", hot:false },
+  { id:758, store:"matdax", product:"Vattenmelon hel",          detail:"Marocko",                     price:15,    origPrice:15,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🍉", hot:false },
+  { id:759, store:"matdax", product:"Galiamelon",                detail:"Spanien",                     price:25,    origPrice:25,    unit:"kg", category:"Mejeri & Övrigt", emoji:"🍈", hot:false },
+  { id:760, store:"matdax", product:"Yoghurt naturell",         detail:"Arla · 1000g, 3%",            price:15,    origPrice:15,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:761, store:"matdax", product:"Turkisk yoghurt",          detail:"Arla · 1kg, 10%",             price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:762, store:"matdax", product:"Fetaost",                  detail:"Greco · 150g",                price:15,    origPrice:15,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:763, store:"matdax", product:"Gorgonzola",                detail:"Galbani · 150g",              price:20,    origPrice:20,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:764, store:"matdax", product:"Mellanmjölk",               detail:"Arla · 2 liter",              price:25,    origPrice:25,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
+  { id:765, store:"matdax", product:"Grana Padano",              detail:"Delia · 150g",                price:35,    origPrice:35,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:766, store:"matdax", product:"Tärnat bacon",              detail:"Scan · 140g",                 price:10,    origPrice:10,    unit:"förp", category:"Kött", emoji:"🥓", hot:false },
+  { id:767, store:"matdax", product:"Falukorv",                  detail:"Gudruns · 700g",              price:20,    origPrice:20,    unit:"förp", category:"Kött", emoji:"🌭", hot:false },
+  { id:768, store:"matdax", product:"Köttbullar",                detail:"Scan · 700g",                 price:39.95, origPrice:39.95, unit:"förp", category:"Kött", emoji:"🍖", hot:false },
+  { id:769, store:"matdax", product:"Pepperoni",                 detail:"Göl · 150g",                  price:15,    origPrice:15,    unit:"förp", category:"Kött", emoji:"🍕", hot:false },
+  { id:770, store:"matdax", product:"Flintastek",                detail:"Scan · Sverige",              price:49.95, origPrice:49.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:771, store:"matdax", product:"Färsk kycklingsteak BBQ",   detail:"Lönneberga · 550g, Sverige",  price:49.95, origPrice:49.95, unit:"st", category:"Kyckling", emoji:"🍗", hot:false },
+  { id:772, store:"matdax", product:"Färsk benfri fläskkotlett", detail:"Tyskland",                    price:49.95, origPrice:49.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:773, store:"matdax", product:"Färsk ryggbiff",            detail:"EU",                          price:129.95, origPrice:129.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:774, store:"matdax", product:"Färsk lammstek med ben",    detail:"Nya Zeeland",                 price:129.95, origPrice:129.95, unit:"kg", category:"Kött", emoji:"🍖", hot:false },
+  { id:775, store:"matdax", product:"Färsk fransyska",           detail:"EU",                          price:119.95, origPrice:119.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:776, store:"matdax", product:"Färsk nötrulle",            detail:"EU",                          price:119.95, origPrice:119.95, unit:"kg", category:"Kött", emoji:"🥩", hot:false },
+  { id:777, store:"matdax", product:"Färsk blandfärs",           detail:"Sverige · 500g",              price:49.95, origPrice:49.95, unit:"förp", category:"Kött", emoji:"🥩", hot:false },
+  { id:778, store:"matdax", product:"Färsk sida",                detail:"Sverige",                     price:69.95, origPrice:69.95, unit:"kg", category:"Kött", emoji:"🥓", hot:false },
+  { id:779, store:"matdax", product:"Färska kycklingvingar",     detail:"Sverige",                     price:34.95, origPrice:34.95, unit:"kg", category:"Kyckling", emoji:"🍗", hot:false },
+  { id:780, store:"matdax", product:"Färsk kycklingbröstfilé",   detail:"Lönneberga · 700g, Sverige",  price:79.95, origPrice:79.95, unit:"förp", category:"Kyckling", emoji:"🍗", hot:false },
+  { id:781, store:"matdax", product:"Basmatiris",                detail:"Mahmood · 4,5kg",             price:125,   origPrice:125,   unit:"förp", category:"Pasta & Ris", emoji:"🍚", hot:false },
+  { id:782, store:"matdax", product:"Olivolja Extra Virgin",     detail:"Buonasi · 750ml",             price:59.95, origPrice:59.95, unit:"förp", category:"Pasta & Ris", emoji:"🫒", hot:false },
+  { id:783, store:"matdax", product:"Chokladask Champs Élysée",  detail:"Lindt · 469g",                price:79.95, origPrice:79.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍫", hot:false },
+  { id:784, store:"matdax", product:"Bröd Stenugnsbakad",        detail:"Södervidinge/Bagersro · 650-700g", price:25, origPrice:25,  unit:"förp", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
+  { id:785, store:"matdax", product:"Hårdost",                   detail:"Allerum · 670g, 28-35%",      price:99,    origPrice:99,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
+  { id:786, store:"matdax", product:"Fruktdryck Proviva",        detail:"1 liter",                     price:27.95, origPrice:27.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧃", hot:false },
+  { id:787, store:"matdax", product:"Flingor",                   detail:"Nestlé · 325-375g",            price:32.95, origPrice:32.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥣", hot:false },
+  { id:788, store:"matdax", product:"Barnens grillkorv",         detail:"Lithells · 400g",             price:27.95, origPrice:27.95, unit:"förp", category:"Kött", emoji:"🌭", hot:false },
+  { id:789, store:"matdax", product:"Kulpotatis",                detail:"Peka · 500g",                 price:22.95, origPrice:22.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
+  { id:790, store:"matdax", product:"Tortilla",                  detail:"Banderos · 320g",             price:10,    origPrice:10,    unit:"förp", category:"Pasta & Ris", emoji:"🌯", hot:false },
+  { id:791, store:"matdax", product:"Pizza Rustica/Suprema",     detail:"Dr Oetker · 492-565g",        price:49.95, origPrice:49.95, unit:"förp", category:"Pasta & Ris", emoji:"🍕", hot:false },
+  { id:792, store:"matdax", product:"Makaroner",                 detail:"Kungsörnen · 750g",           price:15,    origPrice:15,    unit:"förp", category:"Pasta & Ris", emoji:"🍝", hot:false },
+  { id:793, store:"matdax", product:"Glass Ben & Jerry's",       detail:"0,42-0,46 liter",             price:49.95, origPrice:49.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍨", hot:false },
+  { id:794, store:"matdax", product:"Läsk",                      detail:"Pepsi/Zingo · 6x33cl · +pant", price:39.95, origPrice:39.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
+  { id:795, store:"matdax", product:"Hushållspapper",            detail:"Allmänt sortiment",            price:10,    origPrice:10,    unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:false },
+  { id:796, store:"matdax", product:"Våtservetter",              detail:"Eldorado · 72-pack",          price:12.50, origPrice:12.50, unit:"förp", category:"Hem & Hushåll", emoji:"🧴", hot:false },
+  { id:797, store:"matdax", product:"Schampo/Balsam",            detail:"Fructis · 200-250ml",         price:27.95, origPrice:27.95, unit:"förp", category:"Hem & Hushåll", emoji:"🧴", hot:false },
+  { id:798, store:"matdax", product:"WC-Duck Marine",            detail:"55g",                         price:10,    origPrice:10,    unit:"förp", category:"Hem & Hushåll", emoji:"🧽", hot:false },
+  { id:799, store:"matdax", product:"Avfallspåsar",              detail:"Fixa · 25-pack",              price:10,    origPrice:10,    unit:"förp", category:"Hem & Hushåll", emoji:"🗑️", hot:false },
+  // ───────── Hemköp Farsta – denna veckas mejl "Fyndfest hela veckan!" (v26, 22/6) ─────────
+  // ───────── Coop (Stora Coop Västberga) – denna veckas mejl (v26, 22/6), namngivna ─────────
   // ───────── MatDax Hökarängen – dagspriser från reklamblad (v22) ─────────
-  { id:201, store:"matdax", product:"Kycklingfilé",        detail:"Fresh Meat, 800g · Max 4/kund",   price:39.95, origPrice:39.95, unit:"förp", category:"Kyckling",        emoji:"🍗", hot:true,  limitedDays:"Endast mån–tis 25–26/5" },
-  { id:202, store:"matdax", product:"Fetaost",             detail:"Greco, 150g · Max 4/kund",        price:10,    origPrice:10,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:true,  limitedDays:"Endast mån–tis 25–26/5" },
-  { id:203, store:"matdax", product:"Bregott Extrasaltat", detail:"Arla, 500g · Max 4/kund",         price:29.95, origPrice:29.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧈", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:204, store:"matdax", product:"Skivad Goudaost",     detail:"Mesogios, 700g · Max 4/kund",     price:49.95, origPrice:49.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:205, store:"matdax", product:"Lantmjölk",           detail:"Åsens, 1,5 l · Max 4/kund",       price:15,    origPrice:15,    unit:"förp", category:"Mejeri & Övrigt", emoji:"🥛", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:206, store:"matdax", product:"Bananer",             detail:"Centralamerika · Max 4 kg/kund",  price:12.95, origPrice:12.95, unit:"kg",   category:"Mejeri & Övrigt", emoji:"🍌", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:207, store:"matdax", product:"Snabbkaffe",          detail:"Gold Deluxe, 200g · Max 4/kund",  price:45,    origPrice:45,    unit:"förp", category:"Mejeri & Övrigt", emoji:"☕", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:208, store:"matdax", product:"Baklava Turkisk",     detail:"Baklavafabriken, 510g · Max 4/kund",price:49.95,origPrice:49.95,unit:"förp", category:"Mejeri & Övrigt", emoji:"🍰", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:209, store:"matdax", product:"Coca-Cola Zero",      detail:"33 cl · +pant · Max 4/kund",      price:5,     origPrice:5,     unit:"st",   category:"Mejeri & Övrigt", emoji:"🥤", hot:false, limitedDays:"Endast mån–tis 25–26/5" },
-  { id:210, store:"matdax", product:"Prästost / Grevé",    detail:"Allerum, ca 375g, lagrad 12 mån · Max 4/kund", price:29.95, origPrice:29.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧀", hot:true,  limitedDays:"Endast ons–tors 27–28/5" },
-  { id:211, store:"matdax", product:"Kvisttomater",        detail:"Nederländerna · Max 4 kg/kund",   price:20,    origPrice:20,    unit:"kg",   category:"Mejeri & Övrigt", emoji:"🍅", hot:false, limitedDays:"Endast ons–tors 27–28/5" },
-  { id:212, store:"matdax", product:"Apelsinjuice",        detail:"Tropicana, 1,5 l · Max 4/kund",   price:29.95, origPrice:29.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧃", hot:false, limitedDays:"Endast ons–tors 27–28/5" },
-  { id:213, store:"matdax", product:"Pitabröd",            detail:"Dalarnas, 240g · Max 4/kund",     price:5,     origPrice:5,     unit:"förp", category:"Mejeri & Övrigt", emoji:"🫓", hot:true,  limitedDays:"Endast ons–tors 27–28/5" },
-  { id:214, store:"matdax", product:"Torkad Mango",        detail:"Mushy, 100g · Max 4/kund",        price:12.95, origPrice:12.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🥭", hot:false, limitedDays:"Endast ons–tors 27–28/5" },
-  { id:215, store:"matdax", product:"Tvättmedel Color",    detail:"Spar, flytande 4 l · Max 4/kund", price:49.95, origPrice:49.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧴", hot:false, limitedDays:"Endast ons–tors 27–28/5" },
 
   // ───────── Coop (Stora Coop) – medlemspris, gäller 25/5–31/5 ─────────
-  { id:301, store:"coop", product:"Fläskytterfilé",     detail:"Sverige/Dalsjöfors · ca 850-900g · Max 2/hushåll", price:69,  origPrice:69,  unit:"kg",   category:"Kött",            emoji:"🥩", hot:true  },
-  { id:302, store:"coop", product:"Entrecôte / Biff",   detail:"Brasilien/Naturkött · i bit, ca 850-950g · Max 2/hushåll", price:149, origPrice:149, unit:"kg", category:"Kött",            emoji:"🥩", hot:true  },
-  { id:303, store:"coop", product:"Rökt / gravad lax",  detail:"Norge/Mowi · 150g · Max 2/hushåll", price:59,  origPrice:59,  unit:"st",   category:"Fisk & Skaldjur", emoji:"🐟", hot:true  },
-  { id:304, store:"coop", product:"Pasta",              detail:"Zeta · 3 för 35 kr · 400-500g",    price:11.67, origPrice:11.67, unit:"st",   category:"Pasta & Ris",     emoji:"🍝", hot:false },
-  { id:305, store:"coop", product:"Pizzakit",           detail:"Coop · deg och tomatsås · 560g",   price:19,  origPrice:19,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🍕", hot:false },
-  { id:306, store:"coop", product:"Kvisttomater",       detail:"Sverige · klass 1",                price:25,  origPrice:25,  unit:"kg",   category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
-  { id:307, store:"coop", product:"Laktosfri Crème Fraiche", detail:"Coop · 13/32% · 200 ml",      price:10,  origPrice:10,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
-  { id:308, store:"coop", product:"Yoghurt",            detail:"Coop · 2 för 32 kr · 1000g",       price:16,  origPrice:16,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
-  { id:309, store:"coop", product:"Juice / Smoothie",   detail:"Innocent · 750-900 ml",            price:28,  origPrice:28,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🧃", hot:false },
-  { id:310, store:"coop", product:"Dressing / såser",   detail:"Johnny's · 2 för 45 kr",           price:22.50, origPrice:22.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥗", hot:false },
-  { id:311, store:"coop", product:"Förkokt majs 2-pack",detail:"Coop · 400-450g",                  price:20,  origPrice:20,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🌽", hot:false },
-  { id:312, store:"coop", product:"Läsk",               detail:"7Up/Zingo/Pepsi/Pommac · 3 för 35 kr · +pant", price:11.67, origPrice:11.67, unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
-  { id:313, store:"coop", product:"Kolsyrat vatten 12-pack", detail:"Loka · 2 för 69 kr · 12×33cl · +pant", price:34.50, origPrice:34.50, unit:"st", category:"Mejeri & Övrigt", emoji:"💧", hot:false },
-  { id:314, store:"coop", product:"Maskindiskmedel",    detail:"Yes · 114/94 st",                  price:149, origPrice:149, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧴", hot:false },
 
   // ───────── Willys – gäller 25/5–31/5 (pris härlett ur jämförpris × storlek) ─────────
   { id:401, store:"willys", product:"Nötfärs",        detail:"Irland 20% · 800g · Max 3/hushåll", price:89.90, origPrice:105, unit:"förp", category:"Kött",            emoji:"🥩", hot:true  },
@@ -297,76 +261,13 @@ let deals = [
   { id:424, store:"willys", product:"Naturgodis lösvikt",     detail:"Pick & Mix · Spara 40 kr · Max 2",   price:129, origPrice:129, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍬", hot:false },
 
   // ───────── Hemköp – gäller t.o.m 31/5 (pris härlett ur jämförpris × storlek) ─────────
-  { id:501, store:"hemkop", product:"Lantbröd",        detail:"Fazer · 600g",                     price:28.95, origPrice:28.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:502, store:"hemkop", product:"Bregott",         detail:"Arla · 350-500g · Max 5/hushåll",  price:39.95, origPrice:39.95, unit:"förp", category:"Mejeri & Övrigt", emoji:"🧈", hot:false },
-  { id:503, store:"hemkop", product:"Salami",          detail:"Garant · 80g",                     price:14,    origPrice:14,    unit:"förp", category:"Kött",            emoji:"🥓", hot:false },
-  { id:504, store:"hemkop", product:"Krossade tomater",detail:"Garant · 390g",                    price:5,     origPrice:5,     unit:"förp", category:"Pasta & Ris",     emoji:"🥫", hot:true  },
-  { id:505, store:"hemkop", product:"Risifrutti",      detail:"165-175g · olika sorter",          price:9,     origPrice:9,     unit:"st",   category:"Mejeri & Övrigt", emoji:"🍮", hot:false },
-  { id:506, store:"hemkop", product:"Bars / Milkshake",detail:"Barebells · 45-55g, 330ml",        price:17.50, origPrice:17.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍫", hot:false },
-  { id:507, store:"hemkop", product:"Läsk",            detail:"7up/Mountain Dew/Pepsi · 33cl · +pant", price:6, origPrice:6,   unit:"st",   category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
 
   // ───────── Maxi ICA Stormarknad Haninge – veckans erbjudanden (mat/dagligvaror) ─────────
-  { id:601, store:"icamaxi", product:"Fryst kyckling",        detail:"Guldfågeln, Sverige · 350-500g · 3 för 95 kr · Max 1/hushåll", price:31.67, origPrice:31.67, unit:"st",   category:"Kyckling",        emoji:"🍗", hot:true  },
-  { id:602, store:"icamaxi", product:"Fryst Oxpytt",          detail:"Findus · 1500g",                    price:79.90, origPrice:90.80, unit:"st",   category:"Kött",            emoji:"🥩", hot:false },
-  { id:603, store:"icamaxi", product:"Falukorv",              detail:"Härryda Karlsson · 500g",           price:34.90, origPrice:45.30, unit:"st",   category:"Kött",            emoji:"🌭", hot:false },
-  { id:604, store:"icamaxi", product:"Smörgåsmat / pålägg",   detail:"Pärsons · 90-160g · 2 för 35 kr",   price:17.50, origPrice:17.50, unit:"st",   category:"Kött",            emoji:"🥓", hot:false },
-  { id:605, store:"icamaxi", product:"Potatisgratäng",        detail:"ICA · 800g",                        price:15,    origPrice:18.80, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
-  { id:606, store:"icamaxi", product:"Fryst pizza Ristorante",detail:"Dr Oetker · 320-360g · 4 för 100 kr · Max 1/hushåll", price:25, origPrice:25, unit:"st", category:"Mejeri & Övrigt", emoji:"🍕", hot:false },
-  { id:607, store:"icamaxi", product:"Ketchup",               detail:"Felix · 970-1000g · 2 för 56 kr",   price:28,    origPrice:28,    unit:"st",   category:"Pasta & Ris",     emoji:"🍅", hot:false },
-  { id:608, store:"icamaxi", product:"Olivolja",              detail:"Fontana · 500ml",                   price:22.90, origPrice:30.10, unit:"st",   category:"Pasta & Ris",     emoji:"🫒", hot:false },
-  { id:609, store:"icamaxi", product:"Ädelost",               detail:"Kvibille · 140g",                   price:25,    origPrice:28.20, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:610, store:"icamaxi", product:"Mjukost i tub",         detail:"Kavli · 230-275g · Max 2/hushåll",  price:30.90, origPrice:34.80, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:611, store:"icamaxi", product:"Smör",                  detail:"Valio · 500g",                      price:44.90, origPrice:44.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🧈", hot:false },
-  { id:612, store:"icamaxi", product:"Laktosfri mjölk",       detail:"Valio · 1,5 l · 2 för 35 kr",       price:17.50, origPrice:21.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
-  { id:613, store:"icamaxi", product:"Verum filmjölk",        detail:"1 kg · 2 för 39 kr",                price:19.50, origPrice:19.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
-  { id:614, store:"icamaxi", product:"Havredryck",            detail:"Fazer Aito · 1 l · 2 för 28 kr",    price:14,    origPrice:14,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥛", hot:false },
-  { id:615, store:"icamaxi", product:"Ris- / mannamål",       detail:"Risifrutti · 165-175g · 4 för 42 kr", price:10.50, origPrice:12.10, unit:"st", category:"Mejeri & Övrigt", emoji:"🍮", hot:false },
-  { id:616, store:"icamaxi", product:"Korv- / hamburgerbröd", detail:"Pågen · 320-416g · 2 för 40 kr",    price:20,    origPrice:20,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🍔", hot:false },
-  { id:617, store:"icamaxi", product:"Hönökaka / Himla Go",   detail:"Pågen · 400-450g",                  price:17.90, origPrice:17.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫓", hot:false },
-  { id:618, store:"icamaxi", product:"Sirapslimpa",           detail:"ICA Selection · 900g",              price:25,    origPrice:34.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:619, store:"icamaxi", product:"Kolsyrat vatten",       detail:"Loka · 12×33cl · 2 för 75 kr · +pant · Max 1/hushåll", price:37.50, origPrice:42.10, unit:"st", category:"Mejeri & Övrigt", emoji:"💧", hot:false },
-  { id:620, store:"icamaxi", product:"Iskaffe",               detail:"Löfbergs · 230ml · 3 för 45 kr",    price:15,    origPrice:19.40, unit:"st",   category:"Mejeri & Övrigt", emoji:"☕", hot:false },
-  { id:621, store:"icamaxi", product:"Kaffekapslar",          detail:"Zoégas/Starbucks · 10-pack · 3 för 90 kr", price:30, origPrice:30, unit:"st", category:"Mejeri & Övrigt", emoji:"☕", hot:false },
-  { id:622, store:"icamaxi", product:"Blåbär i ask",          detail:"ICA · Marocko/Spanien · 125g",      price:20,    origPrice:24.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫐", hot:false },
-  { id:623, store:"icamaxi", product:"Aprikoser i ask",       detail:"500g",                              price:30,    origPrice:39.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍑", hot:false },
-  { id:624, store:"icamaxi", product:"Kastanjechampinjoner",  detail:"i ask · 250g",                      price:20,    origPrice:24.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍄", hot:false },
-  { id:625, store:"icamaxi", product:"Paprika 2-pack",        detail:"i påse · 350g",                     price:20,    origPrice:23.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🫑", hot:false },
-  { id:626, store:"icamaxi", product:"Snackpaprika",          detail:"ICA · Nederländerna · 150g · 2 för 25 kr", price:12.50, origPrice:19.90, unit:"st", category:"Mejeri & Övrigt", emoji:"🫑", hot:false },
-  { id:627, store:"icamaxi", product:"Finbladiga sallater",   detail:"ICA · i påse · 65g · 2 för 24 kr",  price:12,    origPrice:12,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥬", hot:false },
-  { id:628, store:"icamaxi", product:"Småtomater i ask",      detail:"ICA · Spanien/Marocko · 350g",      price:25,    origPrice:29.90, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍅", hot:false },
-  { id:629, store:"icamaxi", product:"Marinader / Rubs",      detail:"Santa Maria · 22-75g · 4 för 22 kr",price:5.50,  origPrice:5.50,  unit:"st",   category:"Mejeri & Övrigt", emoji:"🧂", hot:false },
-  { id:630, store:"icamaxi", product:"Chips / ostbågar",      detail:"Estrella · 150-275g · 3 för 69 kr", price:23,    origPrice:23,    unit:"st",   category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
-  { id:631, store:"icamaxi", product:"Glass flerpack",        detail:"GB Glace/Magnum · 3-12 pack · 3 för 100 kr", price:33.33, origPrice:33.33, unit:"st", category:"Mejeri & Övrigt", emoji:"🍦", hot:false },
-  { id:632, store:"icamaxi", product:"Gräddglass / sorbet",   detail:"SIA Glass · 0,5 l · 3 för 42 kr · Max 1/hushåll", price:14, origPrice:14, unit:"st", category:"Mejeri & Övrigt", emoji:"🍨", hot:false },
-  { id:633, store:"icamaxi", product:"Chokladkaka",           detail:"Marabou · 160-180g · 2 för 45 kr",  price:22.50, origPrice:22.50, unit:"st",   category:"Mejeri & Övrigt", emoji:"🍫", hot:false },
-  { id:634, store:"icamaxi", product:"Öl 3,5%",               detail:"Carlsberg · 6×50cl · +pant · Max 2/hushåll", price:57.90, origPrice:65.20, unit:"st", category:"Mejeri & Övrigt", emoji:"🍺", hot:false },
 
   // ── ICA Maxi Haninge – hushåll & hygien (ej kläder) ──
-  { id:635, store:"icamaxi", product:"Munskölj",              detail:"Listerine · 500ml",                 price:35.90, origPrice:46.90, unit:"st", category:"Hem & Hushåll", emoji:"🪥", hot:false },
-  { id:636, store:"icamaxi", product:"Duschcreme",            detail:"Family Fresh · 500ml · 2 för 34 kr",price:17,    origPrice:20.90, unit:"st", category:"Hem & Hushåll", emoji:"🧴", hot:false },
-  { id:637, store:"icamaxi", product:"Schampo & balsam",      detail:"OGX · 385ml · 2 för 159 kr",        price:79.50, origPrice:113,   unit:"st", category:"Hem & Hushåll", emoji:"🧴", hot:false },
-  { id:638, store:"icamaxi", product:"Bindor / intimtvätt",   detail:"Libresse · 9-50 pack · 4 för 85 kr",price:21.25, origPrice:21.25, unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:false },
-  { id:639, store:"icamaxi", product:"Städservetter",         detail:"ICA · 70-pack · 3 för 40 kr",       price:13.33, origPrice:20.50, unit:"st", category:"Hem & Hushåll", emoji:"🧽", hot:false },
-  { id:640, store:"icamaxi", product:"Servetter",             detail:"ICA · 50-pack · 2 för 55 kr",       price:27.50, origPrice:31.50, unit:"st", category:"Hem & Hushåll", emoji:"🧻", hot:false },
-  { id:641, store:"icamaxi", product:"Frys- & plastpåsar",    detail:"ICA · 25-100 st · 3 för 30 kr",     price:10,    origPrice:10,    unit:"st", category:"Hem & Hushåll", emoji:"🛍️", hot:false },
-  { id:642, store:"icamaxi", product:"Grillkol & briketter",  detail:"ICA · 2,5 kg · 2 för 89 kr",        price:44.50, origPrice:54.90, unit:"st", category:"Hem & Hushåll", emoji:"🔥", hot:false },
-  { id:643, store:"icamaxi", product:"Sommarspolarvätska",    detail:"Kemetyl · 2 för 50 kr",             price:25,    origPrice:39.90, unit:"st", category:"Hem & Hushåll", emoji:"🚗", hot:false },
-  { id:644, store:"icamaxi", product:"Kattmat",               detail:"Whiskas · 12×85g",                  price:54.90, origPrice:63.90, unit:"st", category:"Hem & Hushåll", emoji:"🐱", hot:false },
 ];
 
-let shoppingList = [];
-let activeCategory = "Allt";
-let activeStores = STORES.map(s => s.id);
-let sortBy = "discount";
-let currentView = "deals";
-let listMode = "current";   // 'current' | 'history'
-let historyData = [];
-
-const pct = (p, o) => Math.round(((o-p)/o)*100);
-const getStore = id => STORES.find(s => s.id === id);
-const fmtKr = p => Number.isInteger(p) ? p + ':-' : p.toFixed(2).replace('.', ':');
-
-// ── Week info (auto) ──────────────────────────────────
+// ── Vecka ─────────────────────────────────────────────────
 function getWeekInfo() {
   const now = new Date();
   const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
@@ -383,449 +284,275 @@ function getWeekInfo() {
   return { week, range: `${fmt(monday)}–${fmt(sunday)}` };
 }
 
-// ── Price comparison (only exact product+unit matches with a real price gap) ──
-function buildPriceCompare() {
-  const groups = {};
-  deals.forEach(d => {
-    const key = d.product.toLowerCase().trim() + '|' + d.unit;
-    (groups[key] = groups[key] || []).push(d);
-  });
-  const map = {};
-  Object.values(groups).forEach(g => {
-    if (g.length < 2) return;
-    const min = Math.min(...g.map(x => x.price));
-    const max = Math.max(...g.map(x => x.price));
-    if (min === max) return; // identical price across stores → nothing useful to say
-    const cheapest = g.find(x => x.price === min);
-    g.forEach(d => {
-      if (d.price === min) map[d.id] = { cheapest: true };
-      else map[d.id] = { cheapest: false, store: getStore(cheapest.store).name.split(' ')[0], price: min };
-    });
-  });
-  return map;
-}
+// ── Design-tokens / hjälp ─────────────────────────────────
+const CAT_BG = {
+  'Kött':'#F7E5DC','Kyckling':'#F6E3D6','Fisk & Skaldjur':'#E0ECF2',
+  'Pasta & Ris':'#EFE7DA','Mejeri & Övrigt':'#FBEFD6','Hem & Hushåll':'#ECE6F2','Frukt & Grönt':'#E9F1DD'
+};
+const CAT_ORDER = ['Kött','Kyckling','Fisk & Skaldjur','Pasta & Ris','Mejeri & Övrigt','Hem & Hushåll'];
+const CAT_EMOJI = {'Kött':'🥩','Kyckling':'🍗','Fisk & Skaldjur':'🐟','Pasta & Ris':'🍝','Mejeri & Övrigt':'🥛','Hem & Hushåll':'🧴'};
+const FALLBACK_STORE = { name:'Övrigt', color:'#B6A893', distance:'' };
+function storeById(id){ return STORES.find(s=>s.id===id) || FALLBACK_STORE; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function kr(n){ if(n==null||isNaN(n)) return '0 kr'; return (Number.isInteger(n)? String(n) : Number(n).toFixed(2).replace('.',',')) + ' kr'; }
 
-function setView(v) {
-  currentView = v;
-  document.getElementById('view-deals').style.display = v==='deals' ? 'block' : 'none';
-  document.getElementById('view-stores').style.display = v==='stores' ? 'block' : 'none';
-  document.getElementById('view-list').style.display = v==='list' ? 'block' : 'none';
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('nav-'+v).classList.add('active');
-  render();
-}
+// ── State ─────────────────────────────────────────────────
+let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
+let shoppingList = [];
 
-function toggleStore(id) {
-  if (activeStores.includes(id)) activeStores = activeStores.filter(s => s !== id);
-  else activeStores.push(id);
-  render();
-}
-
-// ── List actions ──────────────────────────────────────
-async function toggleInList(id) {
-  const deal = deals.find(d => d.id === id);
-  if (!deal) return;
-  markWrite();
-  if (shoppingList.find(i => i.id === id)) {
-    shoppingList = shoppingList.filter(i => i.id !== id);
+// ── Supabase-sync ─────────────────────────────────────────
+async function loadShoppingList(){
+  if (Date.now() - lastLocalWrite < 3500) return;
+  try{
+    const data = await supa.selectRaw('shopping_list?select=*');
+    if(!Array.isArray(data)) return;
+    const hash = JSON.stringify(data.map(r=>[r.id,r.checked,r.qty]).sort());
+    if(hash===lastDataHash) return;
+    lastDataHash = hash;
+    shoppingList = data.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail, price:r.price, origPrice:r.orig_price, unit:r.unit, category:r.category, emoji:r.emoji, checked:r.checked, qty:r.qty||1, isCustom:r.is_custom||false }));
     render();
-    await supa.delete('shopping_list', id);
-  } else {
-    shoppingList.push({ ...deal, qty: 1, checked: false, isCustom: false });
-    render();
-    await saveToSupabase({ ...deal, qty: 1, checked: false, isCustom: false });
-  }
+  }catch(e){ /* offline/förhandsvisning – synkar live */ }
+}
+function inList(id){ return shoppingList.some(i=>i.id===id); }
+async function addOffer(id){
+  const o = deals.find(d=>d.id===id); if(!o||inList(id)) return;
+  const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
+  shoppingList.push(item); markWrite(); render();
+  try{ await supa.insert('shopping_list', { id:item.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
+}
+async function toggleItem(id){
+  const it = shoppingList.find(i=>i.id===id); if(!it) return;
+  it.checked = !it.checked; markWrite(); render();
+  try{ await supa.update('shopping_list', id, { checked: it.checked }); }catch(e){ /* tyst */ }
+}
+async function removeItem(id){
+  shoppingList = shoppingList.filter(i=>i.id!==id); markWrite(); render();
+  try{ await supa.delete('shopping_list', id); }catch(e){ /* tyst */ }
+}
+async function submitCustom(){
+  const name=(document.getElementById('f_name')||{}).value||'';
+  if(!name.trim()) return;
+  const store=(document.getElementById('f_store')||{}).value||'ovrigt';
+  const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
+  const qty=Math.max(1, parseInt((document.getElementById('f_qty')||{}).value||'1')||1);
+  const id = Date.now();
+  const item = { id, store, product:name.trim(), detail:'', price:0, origPrice:0, unit:'', category:c, emoji:CAT_EMOJI[c]||'🛒', checked:false, qty, isCustom:true };
+  shoppingList.push(item); markWrite(); sheet=null; tab='lista'; render();
+  try{ await supa.insert('shopping_list', { id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
+}
+async function submitOffer(){
+  const name=(document.getElementById('f_name')||{}).value||'';
+  const saleV=(document.getElementById('f_sale')||{}).value||'';
+  if(!name.trim()||!saleV) return;
+  const store=(document.getElementById('f_store')||{}).value||'';
+  const details=(document.getElementById('f_details')||{}).value||'';
+  const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
+  const sale=Number(saleV); const ord=Number((document.getElementById('f_ord')||{}).value)||sale;
+  const id = Date.now();
+  deals.unshift({ id, store:store||'ovrigt', product:name.trim(), detail:details||'Eget tillägg', price:sale, origPrice:ord, unit:'st', category:c, emoji:CAT_EMOJI[c]||'🛒', hot:false });
+  sheet=null; tab='erbjudanden'; cat='Alla'; render();
 }
 
-async function removeFromList(id) {
-  markWrite();
-  shoppingList = shoppingList.filter(i => i.id !== id);
-  renderList();
-  await supa.delete('shopping_list', id);
+// ── Render ────────────────────────────────────────────────
+const FAM="'Hanken Grotesk',sans-serif", DISP="'Bricolage Grotesque',sans-serif";
+const PAGE='max-width:1080px;margin:0 auto;padding:clamp(16px,4vw,28px);';
+
+function navBtn(key,label){
+  const active = tab===key;
+  const badge = key==='lista'&&shoppingList.length ? ' · '+shoppingList.length : '';
+  return `<button onclick="go('${key}')" style="flex:1;padding:10px 8px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
 }
-
-async function clearList() {
-  if (!confirm('Rensa hela inköpslistan?')) return;
-  markWrite();
-  shoppingList = [];
-  renderList();
-  await supa.deleteAll('shopping_list');
-}
-
-async function toggleChecked(id) {
-  const item = shoppingList.find(i => i.id === id);
-  if (!item) return;
-  const newChecked = !item.checked;
-  markWrite();
-  shoppingList = shoppingList.map(i => i.id === id ? { ...i, checked: newChecked } : i);
-  renderList();
-  await supa.update('shopping_list', id, { checked: newChecked });
-}
-
-async function changeQty(id, delta) {
-  const item = shoppingList.find(i => i.id === id);
-  if (!item) return;
-  const newQty = Math.max(1, (item.qty || 1) + delta);
-  markWrite();
-  shoppingList = shoppingList.map(i => i.id === id ? { ...i, qty: newQty } : i);
-  renderList();
-  await supa.update('shopping_list', id, { qty: newQty });
-}
-
-// ── Custom items ──────────────────────────────────────
-function openCustomModal() { document.getElementById('custom-overlay').classList.add('open'); }
-function closeCustomModal() { document.getElementById('custom-overlay').classList.remove('open'); }
-
-async function addCustomItem() {
-  const product = document.getElementById('c-product').value.trim();
-  if (!product) return;
-  const cat = document.getElementById('c-cat').value;
-  const item = {
-    id: Date.now(),
-    store: document.getElementById('c-store').value,
-    product,
-    detail: 'Egen vara',
-    price: 0, origPrice: 0, unit: 'st',
-    category: cat,
-    emoji: CAT_EMOJI[cat] || '🛒',
-    qty: Math.max(1, parseInt(document.getElementById('c-qty').value) || 1),
-    checked: false, isCustom: true,
-  };
-  markWrite();
-  shoppingList.push(item);
-  document.getElementById('c-product').value = '';
-  document.getElementById('c-qty').value = '1';
-  closeCustomModal();
-  renderList();
-  await saveToSupabase(item);
-}
-
-// ── History ───────────────────────────────────────────
-async function archiveList() {
-  if (!shoppingList.length) return;
-  if (!confirm('Arkivera den här handlingen och rensa listan?')) return;
+function header(){
   const wi = getWeekInfo();
-  const entry = { id: Date.now(), week: 'Vecka ' + wi.week + ' (' + wi.range + ')', items: shoppingList };
-  markWrite();
-  const r = await supa.insert('purchase_history', entry);
-  if (!r.ok) { alert('Kunde inte spara historik – kör databasuppdateringen för historik.'); return; }
-  shoppingList = [];
-  await supa.deleteAll('shopping_list');
-  await loadHistory();
-  renderList();
-}
-
-async function loadHistory() {
-  try {
-    const d = await supa.selectRaw('purchase_history?select=*&order=archived_at.desc&limit=10');
-    if (Array.isArray(d)) historyData = d;
-  } catch(e) { console.log('History load error', e); }
-}
-
-function setListMode(m) { listMode = m; if (m === 'history') loadHistory().then(renderList); else renderList(); }
-
-// ── Copy to Notes ─────────────────────────────────────
-function copyToNotes() {
-  const wi = getWeekInfo();
-  const today = new Date().toLocaleDateString('sv-SE');
-  const lines = [`🛒 Inköpslista – ${today}`, `Vecka ${wi.week} (${wi.range})`, ''];
-  STORES.filter(s => shoppingList.some(i => i.store === s.id)).forEach(store => {
-    const items = shoppingList.filter(i => i.store === store.id);
-    const total = items.reduce((s,i) => s + i.price * (i.qty||1), 0);
-    lines.push(`📍 ${store.name}`);
-    CATEGORIES.filter(c => c!=='Allt' && items.some(i => i.category===c)).forEach(cat => {
-      lines.push(`  ${CAT_EMOJI[cat]} ${cat}`);
-      items.filter(i => i.category===cat).forEach(item => {
-        const q = (item.qty||1) > 1 ? ` ×${item.qty}` : '';
-        const price = item.isCustom ? '' : ` – ${fmtKr(item.price)}`;
-        lines.push(`    • ${item.product}${q}${price}`);
-      });
-    });
-    if (total > 0) lines.push(`  💰 Ca ${Math.round(total)} kr`);
-    lines.push('');
-  });
-  const totalCost = shoppingList.reduce((s,i) => s + i.price * (i.qty||1), 0);
-  lines.push(`✅ Att betala ca: ${Math.round(totalCost)} kr`);
-  navigator.clipboard.writeText(lines.join('\n')).then(() => {
-    ['copy-btn','copy-btn2'].forEach(id => {
-      const b = document.getElementById(id);
-      if (b) { b.dataset.orig = b.textContent; b.textContent = '✅ Kopierat!'; }
-    });
-    setTimeout(() => ['copy-btn','copy-btn2'].forEach(id => {
-      const b = document.getElementById(id);
-      if (b && b.dataset.orig) b.textContent = b.dataset.orig;
-    }), 2200);
-  });
-}
-
-// ── Add deal (existing offers) ────────────────────────
-function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
-
-function addDeal() {
-  const product = document.getElementById('f-product').value.trim();
-  const price = parseFloat(document.getElementById('f-price').value);
-  const origPrice = parseFloat(document.getElementById('f-orig').value);
-  if (!product || !price || !origPrice) return;
-  const cat = document.getElementById('f-cat').value;
-  deals.unshift({
-    id: Date.now(), store: document.getElementById('f-store').value, product,
-    detail: document.getElementById('f-detail').value, price, origPrice, unit: 'förp',
-    category: cat, emoji: CAT_EMOJI[cat] || '🛒', hot: false
-  });
-  ['f-product','f-detail','f-price','f-orig'].forEach(id => document.getElementById(id).value = '');
-  closeModal();
-  render();
-}
-
-// ── Render ────────────────────────────────────────────
-function render() {
-  const q = document.getElementById('search').value.toLowerCase();
-  const listCount = shoppingList.length;
-  const lb = document.getElementById('list-btn');
-  lb.textContent = listCount > 0 ? `🧾 ${listCount}` : '🧾';
-  lb.className = listCount > 0 ? 'has-items' : '';
-  if (currentView === 'deals') renderDeals(q);
-  if (currentView === 'stores') renderStores();
-  if (currentView === 'list') renderList();
-}
-
-function renderDeals(q) {
-  const el = document.getElementById('view-deals');
-  const cmp = buildPriceCompare();
-
-  let filtered = deals
-    .filter(d => activeStores.includes(d.store))
-    .filter(d => activeCategory === 'Allt' || d.category === activeCategory)
-    .filter(d => !q || d.product.toLowerCase().includes(q) || d.detail.toLowerCase().includes(q))
-    .sort((a,b) => {
-      if (sortBy === 'discount') return pct(b.price,b.origPrice) - pct(a.price,a.origPrice);
-      if (sortBy === 'price') return a.price - b.price;
-      return a.store.localeCompare(b.store);
-    });
-
-  const top3 = [...deals].filter(d=>activeStores.includes(d.store))
-    .sort((a,b)=>pct(b.price,b.origPrice)-pct(a.price,a.origPrice)).slice(0,3);
-
-  let html = `<div style="margin-bottom:16px"><div class="section-title">🔥 Veckans toppfynd</div><div class="scroll-row">`;
-  top3.forEach(d => {
-    const s = getStore(d.store);
-    html += `<div class="top-card" style="border:2px solid ${s.color}25">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-        <span style="font-size:28px">${d.emoji}</span>
-        <span class="discount-badge">-${pct(d.price,d.origPrice)}%</span>
+  return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
+    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;border-radius:14px;background:#E0552E;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 5px 14px rgba(224,85,46,.32);">🛒</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 Hägersten · Vecka ${wi.week}</div>
       </div>
-      <div class="product-name">${d.product}</div>
-      <div class="product-detail">${d.detail}</div>
-      ${d.limitedDays ? `<div style="font-size:10px;font-weight:800;color:#ff6b00;margin-bottom:4px">⏰ ${d.limitedDays}</div>` : ''}
-      <div class="sale-price" style="color:${s.color}">${fmtKr(d.price)}</div>
-      ${d.origPrice > d.price ? `<div class="orig-price">${fmtKr(d.origPrice)}/${d.unit}</div>` : `<div class="orig-price" style="text-decoration:none;color:#888">/${d.unit}</div>`}
-      <div class="store-label" style="color:${s.color}">${s.name.split(' ')[0]}</div>
+      <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
+    </div>
+    <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}
+    </nav>
+  </header>`;
+}
+function offerCard(o){
+  const st = storeById(o.store);
+  const save = (o.origPrice||0) - o.price;
+  const hasDisc = save > 0.001;
+  const pct = hasDisc && o.origPrice ? Math.round(save/o.origPrice*100) : 0;
+  const added = inList(o.id);
+  const bg = CAT_BG[o.category] || '#EFE7DA';
+  let details = o.detail||'';
+  if(o.limitedDays) details = (details?details+' · ':'')+'⏰ '+o.limitedDays;
+  const priceRow = `<div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
+      <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}</span>
+      ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}</span>
+      <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}</span>`:''}
     </div>`;
-  });
-  html += `</div></div>`;
-
-  html += `<div class="scroll-row" style="margin-bottom:8px">`;
-  CATEGORIES.forEach(c => html += `<button class="pill${activeCategory===c?' active':''}" onclick="activeCategory='${c}';render()">${c}</button>`);
-  html += `</div>`;
-
-  html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><div style="font-size:12px;color:#888;font-weight:700">Sortera:</div>`;
-  [['discount','Bäst rea'],['price','Lägst pris'],['store','Butik']].forEach(([v,l]) =>
-    html += `<button class="sort-btn${sortBy===v?' active':''}" onclick="sortBy='${v}';render()">${l}</button>`);
-  html += `</div>`;
-
-  html += `<div class="scroll-row" style="margin-bottom:8px">`;
-  STORES.forEach(s => {
-    const on = activeStores.includes(s.id);
-    html += `<button class="store-pill" style="border-color:${on?s.color:'#ddd'};background:${on?s.color+'18':'white'};color:${on?s.color:'#aaa'}" onclick="toggleStore('${s.id}')">${s.name.split(' ')[0]}</button>`;
-  });
-  html += `</div>`;
-
-  if (!filtered.length) html += `<div style="text-align:center;padding:32px;color:#aaa;font-weight:700">Inga erbjudanden hittades</div>`;
-  filtered.forEach(d => {
-    const s = getStore(d.store);
-    const inList = !!shoppingList.find(i => i.id === d.id);
-    const c = cmp[d.id];
-    let cmpHtml = '';
-    if (c && c.cheapest) cmpHtml = `<div class="cheapest-badge">💚 Billigast just nu</div>`;
-    else if (c) cmpHtml = `<div class="cheaper-elsewhere">↓ Billigare hos ${c.store}: ${c.price} kr</div>`;
-    html += `<div class="deal-card" style="border:1.5px solid ${s.color}15">
-      <span class="deal-emoji">${d.emoji}</span>
-      <div class="deal-info">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span class="deal-name">${d.product}</span>
-          ${d.hot ? '<span class="hot-badge">🔥 HET</span>' : ''}
-        </div>
-        <div class="deal-detail">${d.detail}</div>
-        ${d.limitedDays ? `<div class="limited-badge">⏰ ${d.limitedDays}</div>` : ''}
-        <div class="deal-prices">
-          <span class="deal-sale" style="color:${s.color}">${fmtKr(d.price)}</span>
-          ${d.origPrice > d.price
-            ? `<span class="deal-orig">${fmtKr(d.origPrice)}/${d.unit}</span><span class="pct-badge">-${pct(d.price,d.origPrice)}%</span>`
-            : `<span style="font-size:12px;color:#888">/${d.unit}</span>`}
-        </div>
-        <div class="deal-store" style="color:${s.color}">${s.name}</div>
-        ${cmpHtml}
+  const badge = hasDisc?`<div style="background:#FBEAE2;color:#C2431F;font-weight:800;font-size:13px;padding:5px 9px;border-radius:10px;flex:none;font-family:${DISP};">-${pct}%</div>`:'';
+  const addStyle = added
+    ? `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
+    : `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
+  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <div style="width:54px;height:54px;border-radius:16px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:28px;flex:none;">${o.emoji||'🛒'}</div>
+      <div style="flex:1;min-width:0;">
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;"><span style="width:7px;height:7px;border-radius:50%;background:${st.color};"></span>${esc(st.name)}</span>
+        <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:5px;">${esc(o.product)}</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
       </div>
-      <button class="add-btn${inList?' in-list':''}" onclick="toggleInList(${d.id})">${inList?'✅':'➕'}</button>
-    </div>`;
-  });
-
-  html += `<div style="text-align:center;margin-top:20px;padding-bottom:16px">
-    <button onclick="openModal()" style="background:linear-gradient(135deg,#1a1a2e,#0f3460);color:white;border:none;border-radius:20px;padding:12px 28px;font-weight:800;font-size:14px;box-shadow:0 4px 16px rgba(15,52,96,0.3)">✏️ Lägg till eget erbjudande</button>
+      ${badge}
+    </div>
+    ${priceRow}
+    <button ${added?'':`onclick="addOffer(${o.id})"`} style="${addStyle}">${added?'✓ Tillagd på listan':'+ Lägg till på lista'}</button>
   </div>`;
-  el.innerHTML = html;
 }
-
-function renderStores() {
-  const el = document.getElementById('view-stores');
-  let html = `<div style="font-weight:900;font-size:16px;color:#1a1a2e;margin-bottom:4px">🏪 Närmaste butiker från Farsta</div>
-    <div style="font-size:12px;color:#888;margin-bottom:12px">Sorterade efter avstånd</div>`;
-  STORES.forEach(s => {
-    const count = deals.filter(d => d.store === s.id).length;
-    html += `<div class="store-card" style="border-left:4px solid ${s.color}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-weight:800;font-size:15px;color:#1a1a2e">${s.name}</div>
-          <div style="font-size:12px;color:#888;margin-top:2px">📍 ${s.address}</div>
-          <div style="font-size:12px;color:#888">🕐 ${s.hours} varje dag</div>
-          <div style="font-size:12px;color:${s.color};font-weight:800;margin-top:4px">📏 ${s.distance} från Farsta centrum</div>
+function viewOffers(){
+  const totalSave = deals.reduce((a,o)=>a+Math.max(0,(o.origPrice||0)-o.price),0);
+  const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
+  const chipDefs = ['Alla'].concat(present);
+  const chips = chipDefs.map(c=>{ const a=cat===c;
+    return `<button onclick="setCat('${c.replace(/'/g,"\\'")}')" style="padding:9px 15px;border-radius:12px;border:${a?'none':'1px solid #EFE6D8'};background:${a?'#E0552E':'#fff'};color:${a?'#fff':'#6A5E50'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;font-family:${FAM};flex:none;">${esc(c)}</button>`; }).join('');
+  const visible = cat==='Alla'? deals : deals.filter(o=>o.category===cat);
+  const grid = visible.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga erbjudanden i denna kategori.</div>`;
+  return `<div style="background:linear-gradient(135deg,#E0552E,#C2431F);border-radius:22px;padding:20px 22px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 12px 28px rgba(224,85,46,.26);margin-bottom:18px;">
+      <div style="flex:1;">
+        <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
+        <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
+        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i Farsta-området</div>
+      </div>
+      <div style="font-size:48px;line-height:1;">🥕</div>
+    </div>
+    <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>`;
+}
+function viewStores(){
+  const cards = STORES.map(st=>{
+    const items = deals.filter(o=>o.store===st.id);
+    const save = items.reduce((a,o)=>a+Math.max(0,(o.origPrice||0)-o.price),0);
+    const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
+      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}</span></div>`).join('');
+    return { st, count:items.length, save, html:(st0)=>'' , top };
+  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>{
+    return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:46px;height:46px;border-radius:14px;background:${st.color};color:#fff;display:flex;align-items:center;justify-content:center;font-family:${DISP};font-weight:800;font-size:19px;flex:none;">${esc(st.name[0])}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-family:${DISP};font-weight:700;font-size:16px;">${esc(st.name)}</div>
+          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(st.distance)}</div>
         </div>
-        <div style="text-align:right">
-          <div style="font-size:26px">${s.logo}</div>
-          <div style="font-size:11px;color:#aaa;font-weight:700;margin-top:4px">${count} erbjudanden</div>
+        <div style="text-align:right;flex:none;">
+          <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count}</div>
+          <div style="font-size:10.5px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.04em;">fynd</div>
         </div>
       </div>
-      <a href="${s.url}" target="_blank" class="store-link" style="background:${s.color}15;color:${s.color}">🌐 Se reklamblad på webben →</a>
+      ${count?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #E6DBC9;display:flex;flex-direction:column;gap:9px;">${top}</div>`:''}
+      ${save>0?`<div style="margin-top:14px;background:#EAF1E3;color:#3E6632;font-weight:700;font-size:13px;border-radius:12px;padding:10px 12px;text-align:center;">Spara upp till ${kr(save)}</div>`:''}
     </div>`;
-  });
-  html += `<div class="tip-box">💡 <b>Tips:</b> Hemköp (0,4 km) och Coop (0,5 km) ligger närmast hemma. MatDax Hökarängen har ofta halvpris på kött och särskilda dagspriser (mån–tis / ons–tors). Willys har bland Sveriges lägsta matkassepriser.</div>`;
-  el.innerHTML = html;
+  }).join('');
+  return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">Butiker i närheten</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Jämför veckans bästa fynd per butik</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
 }
-
-function renderList() {
-  const el = document.getElementById('view-list');
-  el.style.background = 'white';
-  el.style.minHeight = '100vh';
-  el.style.padding = '0';
-
-  // segmented control (Aktuell / Historik)
-  let html = `<div style="padding:14px 16px 8px"><div class="seg">
-    <button class="${listMode==='current'?'active':''}" onclick="setListMode('current')">📋 Aktuell</button>
-    <button class="${listMode==='history'?'active':''}" onclick="setListMode('history')">📜 Historik</button>
-  </div></div>`;
-
-  if (listMode === 'history') {
-    if (!historyData.length) {
-      html += `<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">📜</div>
-        <div style="font-weight:700;font-size:15px;color:#888">Ingen historik än</div>
-        <div style="font-size:13px;margin-top:4px;color:#bbb">Arkivera en handling så sparas den här</div></div>`;
-    } else {
-      historyData.forEach(h => {
-        const items = Array.isArray(h.items) ? h.items : [];
-        const total = items.reduce((s,i) => s + (i.price||0) * (i.qty||1), 0);
-        const date = h.archived_at ? new Date(h.archived_at).toLocaleDateString('sv-SE') : '';
-        html += `<div style="padding:16px 20px 6px;border-top:8px solid #f7f7f7">
-          <div style="font-size:17px;font-weight:900;color:#1a1a2e">${h.week || 'Handling'}</div>
-          <div style="font-size:12px;color:#aaa">${date} · ${items.length} varor · ca ${Math.round(total)} kr</div></div>`;
-        items.forEach(i => {
-          const q = (i.qty||1) > 1 ? ` ×${i.qty}` : '';
-          html += `<div style="padding:7px 20px;font-size:15px;color:#555">${i.product}${q} ${i.emoji||''}</div>`;
-        });
-      });
-    }
-    el.innerHTML = html;
-    return;
+function viewList(){
+  if(!shoppingList.length){
+    return `<div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:54px;">🧺</div>
+      <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Listan är tom</div>
+      <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Lägg till veckans erbjudanden eller egna varor så samlas de här.</div>
+      <button onclick="go('erbjudanden')" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bläddra bland fynd</button>
+    </div>`;
   }
-
-  // current list
-  if (!shoppingList.length) {
-    html += `<div class="empty-state"><div style="font-size:48px;margin-bottom:12px">🛒</div>
-      <div style="font-weight:700;font-size:15px;color:#888">Listan är tom</div>
-      <div style="font-size:13px;margin-top:4px;color:#bbb">Tryck ➕ på erbjudanden eller lägg till en egen vara</div>
-      <button onclick="openCustomModal()" style="margin-top:16px;background:#1a1a2e;color:white;border:none;border-radius:14px;padding:10px 24px;font-weight:800;font-size:14px">➕ Lägg till egen vara</button>
+  const totalPrice = shoppingList.reduce((a,i)=>a+(i.isCustom?0:i.price*i.qty),0);
+  const totalSaved = shoppingList.reduce((a,i)=>a+(i.isCustom?0:Math.max(0,(i.origPrice||0)-i.price)*i.qty),0);
+  const order=[], gmap={};
+  shoppingList.forEach(i=>{ if(!gmap[i.store]){ const st=storeById(i.store); gmap[i.store]={name:st.name,color:st.color,items:[]}; order.push(i.store);} gmap[i.store].items.push(i); });
+  const groups = order.map(k=>{ const g=gmap[k];
+    const rows = g.items.map(i=>{
+      const lineSave=Math.max(0,(i.origPrice||0)-i.price)*i.qty;
+      const meta=(i.qty>1?i.qty+' st · ':'')+(i.isCustom?'egen vara':((i.origPrice>i.price)?('ord. '+kr(i.origPrice)+' · spar '+kr(lineSave)):(i.detail||i.unit||'')));
+      const priceStr=i.isCustom?'—':kr(i.price*i.qty);
+      const checkStyle=`width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;font-weight:800;color:#fff;background:${i.checked?'#4F7A3F':'#fff'};border:${i.checked?'1px solid #4F7A3F':'2px solid #E0D5C2'};`;
+      const nameStyle=`font-weight:700;font-size:14.5px;color:${i.checked?'#B6A893':'#2A211A'};text-decoration:${i.checked?'line-through':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:11px 12px;">
+        <button onclick="toggleItem(${i.id})" style="${checkStyle}">${i.checked?'✓':''}</button>
+        <div style="flex:1;min-width:0;"><div style="${nameStyle}">${esc(i.product)}</div><div style="font-size:12px;color:#8A7E6E;margin-top:1px;">${esc(meta)}</div></div>
+        <span style="font-weight:800;font-size:14px;font-family:${DISP};color:#2A211A;">${priceStr}</span>
+        <button onclick="removeItem(${i.id})" style="width:28px;height:28px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:13px;cursor:pointer;flex:none;">✕</button>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;"><span style="width:9px;height:9px;border-radius:50%;background:${g.color};"></span><span style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#8A7E6E;">${esc(g.name)}</span></div>
+      <div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>
     </div>`;
-    el.innerHTML = html;
-    return;
-  }
-
-  const doneCount = shoppingList.filter(i => i.checked).length;
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 20px 12px;border-bottom:1px solid #f0f0f0">
-    <div style="font-size:13px;color:#aaa;font-weight:600">${doneCount} av ${shoppingList.length} klara</div>
-    <div style="display:flex;gap:14px">
-      <button id="copy-btn2" onclick="copyToNotes()" style="background:none;border:none;font-size:13px;color:#007aff;font-weight:700;padding:0">📋 Kopiera</button>
-      <button onclick="clearList()" style="background:none;border:none;font-size:13px;color:#ff3b30;font-weight:700;padding:0">Rensa</button>
-    </div>
-  </div>`;
-
-  STORES.filter(s => shoppingList.some(i => i.store === s.id)).forEach(store => {
-    const items = shoppingList.filter(i => i.store === store.id);
-    const total = items.reduce((s,i) => s + i.price * (i.qty||1), 0);
-    const cats = CATEGORIES.filter(c => c !== 'Allt' && items.some(i => i.category === c));
-
-    html += `<div style="padding:18px 20px 4px;display:flex;justify-content:space-between;align-items:baseline">
-      <div style="font-size:22px;font-weight:900;color:${store.color};letter-spacing:-0.3px">${store.name}</div>
-      ${total > 0 ? `<div style="font-size:14px;font-weight:800;color:${store.color}">ca ${Math.round(total)} kr</div>` : ''}
-    </div>
-    <div style="padding:0 20px 2px;font-size:12px;color:#aaa">${store.address} · ${store.hours}</div>`;
-
-    cats.forEach(cat => {
-      html += `<div style="padding:10px 20px 2px;font-size:12px;font-weight:800;color:#bbb;text-transform:uppercase;letter-spacing:1px">${CAT_EMOJI[cat]} ${cat}</div>`;
-      items.filter(i => i.category === cat).forEach(item => {
-        const checked = !!item.checked;
-        const qty = item.qty || 1;
-        const sub = item.isCustom ? 'Egen vara' : `${item.detail} · ${fmtKr(item.price)}`;
-        html += `<div style="display:flex;align-items:center;padding:11px 20px;gap:12px;border-bottom:1px solid #f5f5f5;background:white">
-          <div onclick="toggleChecked(${item.id})" style="width:26px;height:26px;border-radius:50%;border:2px solid ${checked ? store.color : '#d0d0d0'};background:${checked ? store.color : 'white'};flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer">
-            ${checked ? '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polyline points="2,7 6,11 12,3" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}
-          </div>
-          <div onclick="toggleChecked(${item.id})" style="flex:1;min-width:0;cursor:pointer">
-            <div style="font-size:17px;font-weight:500;color:${checked ? '#bbb' : '#1a1a1a'};text-decoration:${checked ? 'line-through' : 'none'};line-height:1.3">${item.product} ${item.emoji}</div>
-            <div style="font-size:13px;color:${checked ? '#d0d0d0' : '#888'};margin-top:1px">${sub}</div>
-          </div>
-          <div class="qty-stepper">
-            <button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button>
-            <span class="qty-num">${qty}</span>
-            <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
-            <button class="qty-btn" style="background:#ffe5e5;color:#cc0000" onclick="removeFromList(${item.id})">×</button>
-          </div>
-        </div>`;
-      });
-    });
-    html += `<div style="height:8px;background:#f7f7f7;border-top:1px solid #eee;border-bottom:1px solid #eee"></div>`;
-  });
-
-  const totalCost = shoppingList.reduce((s,i) => s + i.price * (i.qty||1), 0);
-  html += `<div style="padding:18px 20px 8px">
-    <button onclick="openCustomModal()" style="width:100%;padding:12px;background:#eef1f7;border:none;border-radius:14px;font-size:14px;font-weight:800;color:#1a1a2e">➕ Lägg till egen vara</button>
-  </div>`;
-  html += `<div style="padding:0 20px 8px">
-    <div style="background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:16px;padding:16px;color:white;text-align:center">
-      <div style="font-size:13px;font-weight:700;opacity:0.7">Att betala ca</div>
-      <div style="font-size:30px;font-weight:900;color:#ffd700">${Math.round(totalCost)} kr</div>
-      <button id="copy-btn" onclick="copyToNotes()" style="margin-top:12px;width:100%;padding:12px;background:#ffd700;color:#1a1a2e;border:none;border-radius:13px;font-size:14px;font-weight:800">📋 Kopiera till Apple Notes</button>
-      <button onclick="archiveList()" style="margin-top:8px;width:100%;padding:11px;background:rgba(255,255,255,0.12);color:white;border:none;border-radius:13px;font-size:13px;font-weight:700">📦 Arkivera handling & rensa</button>
-    </div>
-  </div>`;
-  el.innerHTML = html;
+  }).join('');
+  return `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
+      <div style="flex:1;"><div style="font-size:12.5px;opacity:.65;">${shoppingList.length} varor att handla</div><div style="font-family:${DISP};font-weight:800;font-size:32px;line-height:1;margin-top:4px;">${kr(totalPrice)}</div></div>
+      <div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Du sparar</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#9FD27E;margin-top:3px;">-${kr(totalSaved)}</div></div>
+    </div>${groups}`;
 }
+function inputStyle(){ return `width:100%;padding:12px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;font-size:15px;font-family:${FAM};color:#2A211A;outline:none;`; }
+function storeOptions(){ return STORES.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join(''); }
+function catOptions(){ return CAT_ORDER.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); }
+function seg(on){ return `flex:1;padding:10px;border-radius:11px;border:none;background:${on?'#fff':'transparent'};color:${on?'#2A211A':'#8A7E6E'};font-weight:${on?700:600};font-size:13.5px;cursor:pointer;font-family:${FAM};box-shadow:${on?'0 2px 6px rgba(0,0,0,.07)':'none'};`; }
+function lbl(t){ return `<span style="font-size:12.5px;font-weight:700;color:#6A5E50;display:block;margin-bottom:6px;">${t}</span>`; }
+function sheetView(){
+  if(!sheet) return '';
+  const erb = mode==='erbjudande';
+  const body = erb ? `
+    <div style="font-size:13px;color:#8A7E6E;margin:10px 2px 16px;">Lägg till ett fynd du hittat i veckan.</div>
+    <label style="display:block;margin-bottom:13px;">${lbl('Butik')}<select id="f_store" style="${inputStyle()}"><option value="">Välj butik…</option>${storeOptions()}</select></label>
+    <label style="display:block;margin-bottom:13px;">${lbl('Produkt')}<input id="f_name" placeholder="t.ex. Kycklingfilé 900g" style="${inputStyle()}"></label>
+    <label style="display:block;margin-bottom:13px;">${lbl('Detaljer')}<input id="f_details" placeholder="t.ex. fryst, 2-pack" style="${inputStyle()}"></label>
+    <label style="display:block;margin-bottom:13px;">${lbl('Kategori')}<select id="f_cat" style="${inputStyle()}">${catOptions()}</select></label>
+    <div style="display:flex;gap:12px;margin-bottom:18px;">
+      <label style="flex:1;">${lbl('Rea-pris (kr)')}<input id="f_sale" type="number" inputmode="decimal" placeholder="59" style="${inputStyle()}"></label>
+      <label style="flex:1;">${lbl('Ordinarie (kr)')}<input id="f_ord" type="number" inputmode="decimal" placeholder="89" style="${inputStyle()}"></label>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeSheet()" style="flex:none;padding:13px 18px;border:1px solid #E3D8C6;border-radius:14px;background:#fff;color:#6A5E50;font-weight:700;font-size:15px;font-family:${FAM};cursor:pointer;">Avbryt</button>
+      <button onclick="submitOffer()" style="flex:1;padding:13px;border:none;border-radius:14px;background:#E0552E;color:#fff;font-weight:700;font-size:15px;font-family:${FAM};cursor:pointer;">✅ Lägg till erbjudande</button>
+    </div>` : `
+    <div style="font-size:13px;color:#8A7E6E;margin:10px 2px 16px;">För saker som inte är på rea, t.ex. mjölk eller bröd.</div>
+    <label style="display:block;margin-bottom:13px;">${lbl('Vara')}<input id="f_name" placeholder="t.ex. Mjölk 1,5 L" style="${inputStyle()}"></label>
+    <label style="display:block;margin-bottom:13px;">${lbl('Butik')}<select id="f_store" style="${inputStyle()}"><option value="ovrigt">Valfri butik</option>${storeOptions()}</select></label>
+    <div style="display:flex;gap:12px;margin-bottom:18px;">
+      <label style="flex:1;">${lbl('Kategori')}<select id="f_cat" style="${inputStyle()}">${catOptions()}</select></label>
+      <label style="width:96px;flex:none;">${lbl('Antal')}<input id="f_qty" type="number" inputmode="numeric" min="1" value="1" style="${inputStyle()}"></label>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeSheet()" style="flex:none;padding:13px 18px;border:1px solid #E3D8C6;border-radius:14px;background:#fff;color:#6A5E50;font-weight:700;font-size:15px;font-family:${FAM};cursor:pointer;">Avbryt</button>
+      <button onclick="submitCustom()" style="flex:1;padding:13px;border:none;border-radius:14px;background:#4F7A3F;color:#fff;font-weight:700;font-size:15px;font-family:${FAM};cursor:pointer;">✅ Lägg till på listan</button>
+    </div>`;
+  return `<div onclick="closeSheet()" style="position:fixed;inset:0;z-index:40;background:rgba(42,33,26,.45);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;animation:vfFade .2s ease;">
+    <div onclick="event.stopPropagation()" style="width:100%;max-width:520px;background:#FBF6EE;border-radius:26px 26px 0 0;padding:18px clamp(16px,4vw,24px) 30px;animation:vfSheet .3s cubic-bezier(.22,1,.36,1);max-height:92vh;overflow:auto;">
+      <div style="width:40px;height:4px;background:#E0D5C2;border-radius:3px;margin:0 auto 16px;"></div>
+      <div style="display:flex;background:#F0E8DA;border-radius:14px;padding:4px;margin-bottom:8px;">
+        <button onclick="setMode('erbjudande')" style="${seg(erb)}">🏷️ Erbjudande</button>
+        <button onclick="setMode('vara')" style="${seg(!erb)}">🛒 Egen vara</button>
+      </div>${body}
+    </div></div>`;
+}
+function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">✏️ Erbjudande</button>`; }
 
-// ── Init ──────────────────────────────────────────────
-const wi = getWeekInfo();
-document.getElementById('app-subtitle').textContent = `Farsta-området · Vecka ${wi.week}, ${wi.range}`;
+function render(){
+  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():viewList();
+  document.getElementById('app').innerHTML =
+    header() +
+    `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
+    fab() + sheetView();
+}
+function go(t){ tab=t; if(t!=='erbjudanden') cat='Alla'; render(); }
+function setCat(c){ cat=c; render(); }
+function openSheet(m){ sheet=true; mode=m; render(); }
+function closeSheet(){ sheet=null; render(); }
+function setMode(m){ mode=m; render(); }
 
-STORES.forEach(s => {
-  document.getElementById('f-store').innerHTML += `<option value="${s.id}">${s.name}</option>`;
-  document.getElementById('c-store').innerHTML += `<option value="${s.id}">${s.name}</option>`;
-});
-CATEGORIES.filter(c => c!=='Allt').forEach(c => {
-  document.getElementById('f-cat').innerHTML += `<option value="${c}">${c}</option>`;
-  document.getElementById('c-cat').innerHTML += `<option value="${c}">${c}</option>`;
-});
-
+// ── Init ──────────────────────────────────────────────────
 render();
 loadShoppingList();
-loadHistory();
 setInterval(loadShoppingList, 5000);
 </script>
 </body>
