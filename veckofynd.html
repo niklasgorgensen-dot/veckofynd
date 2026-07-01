@@ -288,6 +288,7 @@ function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
 // ── State ─────────────────────────────────────────────────
 let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
 let shoppingList = [];
+let recipeQuery='', recipeLoading=false, recipeResult=null, recipeError=null;
 
 // ── Supabase-sync ─────────────────────────────────────────
 async function loadShoppingList(){
@@ -373,7 +374,7 @@ function header(){
       <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
     </div>
     <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
     </nav>
   </header>`;
 }
@@ -492,6 +493,62 @@ function viewList(){
       <div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Du sparar</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#9FD27E;margin-top:3px;">-${kr(totalSaved)}</div></div>
     </div>${groups}`;
 }
+function recipeCard(r){
+  const usedIds = new Set(r.dealIdsUsed||[]);
+  const ingRows = (r.ingredients||[]).map(ing=>{
+    const d = ing.fromDealId!=null ? deals.find(x=>x.id===ing.fromDealId) : null;
+    const tag = d ? `<span style="margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:3px 8px;border-radius:8px;">${esc(storeById(d.store).name)} · ${kr(d.price)}${unitSuffix(d.unit)}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(ing.amount||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
+  }).join('');
+  const steps = (r.steps||[]).map((s,i)=>`<div style="display:flex;gap:10px;padding:6px 0;font-size:13.5px;line-height:1.5;"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#F0E8DA;color:#6A5E50;font-weight:800;font-size:11.5px;display:flex;align-items:center;justify-content:center;">${i+1}</span><span>${esc(s)}</span></div>`).join('');
+  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:4px;">
+      <div style="flex:1;font-family:${DISP};font-weight:800;font-size:18px;line-height:1.2;">${esc(r.title||'Recept')}</div>
+      <div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${usedIds.size} fynd använda</div>
+    </div>
+    <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:12px;">${r.servings?`${r.servings} port · `:''}${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost)} totalt`:''}</div>
+    <div style="margin-bottom:10px;">${ingRows}</div>
+    <div>${steps}</div>
+  </div>`;
+}
+async function generateRecipes(){
+  const val = document.getElementById('recipe_q');
+  recipeQuery = val ? val.value : recipeQuery;
+  recipeLoading = true; recipeError = null; recipeResult = null;
+  render();
+  try{
+    const res = await fetch(`${SUPA_URL}/functions/v1/generate-recipe`, {
+      method:'POST', headers: SUPA_HEAD,
+      body: JSON.stringify({ deals: deals, request: recipeQuery })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){ recipeError = data.error || 'Något gick fel, försök igen.'; }
+    else { recipeResult = data; }
+  }catch(e){ recipeError = 'Kunde inte nå AI-tjänsten. Kontrollera anslutningen.'; }
+  recipeLoading = false;
+  render();
+}
+function viewRecipes(){
+  const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:18px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
+      <div style="font-size:13px;opacity:.92;font-weight:600;">🍳 AI-recept av veckans fynd</div>
+      <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">Beskriv vad du vill laga (t.ex. "4 personer, snabb vardagsmat, gärna kyckling") så bygger AI:n recept som använder så många av veckans erbjudanden som möjligt.</div>
+    </div>`;
+  const inputRow = `<div style="display:flex;gap:10px;margin-bottom:18px;">
+      <input id="recipe_q" value="${esc(recipeQuery)}" placeholder="t.ex. 4 personer, snabb vardagsmat…" style="${inputStyle()}" ${recipeLoading?'disabled':''}>
+      <button onclick="generateRecipes()" ${recipeLoading?'disabled':''} style="flex:none;padding:0 20px;border:none;border-radius:12px;background:${recipeLoading?'#B6A893':'#4F7A3F'};color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:${recipeLoading?'default':'pointer'};">${recipeLoading?'Skapar…':'Skapa recept'}</button>
+    </div>`;
+  let body = '';
+  if(recipeLoading){
+    body = `<div style="text-align:center;padding:40px 0;color:#8A7E6E;font-size:14px;">🍳 AI:n läser igenom ${deals.length} erbjudanden och bygger recept…</div>`;
+  } else if(recipeError){
+    body = `<div style="background:#FBEAE2;color:#C2431F;border-radius:16px;padding:16px;font-size:14px;">⚠️ ${esc(recipeError)}</div>`;
+  } else if(recipeResult && Array.isArray(recipeResult.recipes)){
+    body = recipeResult.recipes.map(recipeCard).join('');
+  } else {
+    body = `<div style="text-align:center;padding:30px 0;color:#8A7E6E;font-size:14px;">Skriv vad du är sugen på och tryck "Skapa recept".</div>`;
+  }
+  return intro + inputRow + body;
+}
 function inputStyle(){ return `width:100%;padding:12px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;font-size:15px;font-family:${FAM};color:#2A211A;outline:none;`; }
 function storeOptions(){ return STORES.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join(''); }
 function catOptions(){ return CAT_ORDER.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); }
@@ -537,7 +594,7 @@ function sheetView(){
 function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">✏️ Erbjudande</button>`; }
 
 function render(){
-  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():viewList();
+  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():viewList();
   document.getElementById('app').innerHTML =
     header() +
     `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
