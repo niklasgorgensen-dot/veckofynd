@@ -12,7 +12,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+  .vf-pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(42,33,26,.35);border:2px solid #fff;}
+  .vf-pin span{transform:rotate(45deg);font-size:14px;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;}
   body{background:#FBF6EE;font-family:'Hanken Grotesk',sans-serif;color:#2A211A;-webkit-font-smoothing:antialiased;}
@@ -49,13 +53,22 @@ let AREAS = [];
 let currentAreaId = localStorage.getItem('vf_area_id') || null;
 let currentAreaName = localStorage.getItem('vf_area_name') || 'Ditt område';
 let STORES = [];
+let ALL_STORES = [];
 let deals = [];
 let catalogLoading = true, catalogError = null;
+let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
+let vfMap = null, vfMapMarkers = {};
 
 function mapStoreRow(r){
   const fb = CHAIN_FALLBACK[r.chain] || {color:"#B6A893",logo:"🛒"};
   return { id:r.id, name:r.name, color:r.color||fb.color, logo:fb.logo, logoUrl:r.logo_url,
-    address:r.address||'', distance:r.distance_km?`${r.distance_km} km`:'', hours:r.hours||'', url:(r.scrape_config&&r.scrape_config.offer_url)||r.website_url||'' };
+    address:r.address||'', distance:r.distance_km?`${r.distance_km} km`:'', hours:r.hours||'', url:(r.scrape_config&&r.scrape_config.offer_url)||r.website_url||'',
+    lat:r.lat!=null?Number(r.lat):null, lng:r.lng!=null?Number(r.lng):null, areaId:r.area_id };
+}
+function saveFollowed(){ localStorage.setItem('vf_followed_stores', JSON.stringify(Array.from(followedStoreIds))); }
+function toggleFollow(storeId){
+  if(followedStoreIds.has(storeId)) followedStoreIds.delete(storeId); else followedStoreIds.add(storeId);
+  saveFollowed(); loadCatalog();
 }
 function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
@@ -74,9 +87,13 @@ async function loadCatalog(){
   catalogLoading = true; catalogError = null; render();
   try{
     await loadAreas();
-    if(!currentAreaId){ catalogLoading=false; render(); return; }
-    const storeRows = await supa.selectRaw(`stores?select=*&area_id=eq.${currentAreaId}&active=eq.true&order=name.asc`);
-    STORES = Array.isArray(storeRows) ? storeRows.map(mapStoreRow) : [];
+    const allRows = await supa.selectRaw('stores?select=*&active=eq.true&order=name.asc');
+    ALL_STORES = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
+    if(followedStoreIds.size){
+      STORES = ALL_STORES.filter(s=>followedStoreIds.has(s.id));
+    } else if(currentAreaId){
+      STORES = ALL_STORES.filter(s=>s.areaId===currentAreaId);
+    } else STORES = [];
     const ids = STORES.map(s=>s.id);
     if(ids.length){
       const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${ids.join(',')})&order=scraped_at.desc`);
@@ -117,7 +134,7 @@ const CAT_BG = {
 const CAT_ORDER = ['Frukt & Grönt','Kött & Chark','Mejeri','Bröd, kex & bageri','Skafferivaror','Djupfryst','Hem & fritid','Hälsa & skönhet'];
 const CAT_EMOJI = {'Frukt & Grönt':'🥬','Kött & Chark':'🥩','Mejeri':'🥛','Bröd, kex & bageri':'🍞','Skafferivaror':'🥫','Djupfryst':'🧊','Hem & fritid':'🧴','Hälsa & skönhet':'💊'};
 const FALLBACK_STORE = { name:'Övrigt', color:'#B6A893', distance:'' };
-function storeById(id){ return STORES.find(s=>s.id===id) || FALLBACK_STORE; }
+function storeById(id){ return STORES.find(s=>s.id===id) || ALL_STORES.find(s=>s.id===id) || FALLBACK_STORE; }
 function storeLogo(st, size, radius){
   radius = radius || Math.round(size*0.3);
   const fallback = `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${st.color};color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:${Math.round(size*0.42)}px;flex:none;">${esc((st.name||'?')[0])}</div>`;
@@ -342,27 +359,20 @@ function viewOffers(){
       <div style="flex:1;">
         <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
         <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
-        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i ${esc(currentAreaName)}</div>
+        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden ${followedStoreIds.size?`från ${followedStoreIds.size} valda butiker`:`i ${esc(currentAreaName)}`}</div>
       </div>
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
     <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>`;
 }
-function viewStores(){
-  const cards = STORES.map(st=>{
-    const items = deals.filter(o=>o.store===st.id);
-    const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
-    const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
-      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
-    return { st, count:items.length, save, html:(st0)=>'' , top };
-  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>{
-    return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
+function storeCard(st, count, save, top, followed){
+  return `<div style="background:#fff;border:1px solid ${followed?'#E0552E':'#EFE6D8'};border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
       <div style="display:flex;align-items:center;gap:12px;">
         ${storeLogo(st,46,14)}
         <div style="flex:1;min-width:0;">
           <div style="font-family:${DISP};font-weight:700;font-size:16px;">${esc(st.name)}</div>
-          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(st.distance)}</div>
+          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(st.address||st.distance||'')}</div>
         </div>
         <div style="text-align:right;flex:none;">
           <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count}</div>
@@ -371,10 +381,46 @@ function viewStores(){
       </div>
       ${count?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #E6DBC9;display:flex;flex-direction:column;gap:9px;">${top}</div>`:''}
       ${save>0?`<div style="margin-top:14px;background:#EAF1E3;color:#3E6632;font-weight:700;font-size:13px;border-radius:12px;padding:10px 12px;text-align:center;">Spara upp till ${kr(save)}</div>`:''}
+      <button onclick="toggleFollow('${st.id}')" style="margin-top:14px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:13.5px;font-family:${FAM};border:1px solid ${followed?'#E0552E':'#E3D8C6'};background:${followed?'#FBEAE2':'#fff'};color:${followed?'#C2431F':'#6A5E50'};cursor:pointer;">${followed?'✓ Följer den här butiken':'+ Följ den här butiken'}</button>
     </div>`;
-  }).join('');
-  return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">Butiker i närheten</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Jämför veckans bästa fynd per butik</div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
+}
+function viewStores(){
+  const list = followedStoreIds.size ? STORES : STORES;
+  const cards = list.map(st=>{
+    const items = deals.filter(o=>o.store===st.id);
+    const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
+    const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
+      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
+    return { st, count:items.length, save, top };
+  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
+  const heading = followedStoreIds.size ? `Dina ${followedStoreIds.size} valda butiker` : 'Butiker i närheten';
+  const sub = followedStoreIds.size ? 'Klicka på kartan för att lägga till eller ta bort butiker' : 'Klicka på en butik på kartan för att följa den, oavsett område';
+  return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
+    <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
+    ${followedStoreIds.size?`<button onclick="clearFollowed()" style="margin-bottom:16px;padding:10px 16px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Rensa valda butiker</button>`:''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}</div>`;
+}
+function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); loadCatalog(); }
+function renderStoreMap(){
+  const el = document.getElementById('vf-map');
+  if(!el || typeof L === 'undefined' || !ALL_STORES.length) return;
+  if(vfMap){ try{ vfMap.remove(); }catch(e){} vfMap = null; }
+  vfMap = L.map('vf-map', {scrollWheelZoom:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
+  vfMapMarkers = {};
+  const pts = [];
+  ALL_STORES.forEach(st=>{
+    if(st.lat==null || st.lng==null) return;
+    pts.push([st.lat, st.lng]);
+    const followed = followedStoreIds.has(st.id);
+    const icon = L.divIcon({className:'', html:`<div class="vf-pin" style="background:${followed?'#E0552E':st.color};"><span>${followed?'✓':(st.logo||'🛒')}</span></div>`, iconSize:[30,30], iconAnchor:[15,30]});
+    const marker = L.marker([st.lat, st.lng], {icon}).addTo(vfMap);
+    marker.bindPopup(`<b>${esc(st.name)}</b><br>${followed?'Följs — klicka för att sluta följa':'Klicka på nålen för att följa'}`);
+    marker.on('click', ()=>toggleFollow(st.id));
+    vfMapMarkers[st.id] = marker;
+  });
+  if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
+  setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
 }
 function viewList(){
   // ── Sökruta ───────────────────────────────────────────────
@@ -601,6 +647,7 @@ function render(){
     header() +
     `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
     fab() + sheetView();
+  if(tab==='butiker' && !catalogLoading) setTimeout(renderStoreMap, 0);
 }
 function go(t){ tab=t; if(t!=='erbjudanden') cat='Alla'; render(); }
 function setCat(c){ cat=c; render(); }
