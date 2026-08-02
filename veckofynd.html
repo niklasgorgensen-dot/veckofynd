@@ -104,6 +104,7 @@ let currentAreaName = localStorage.getItem('vf_area_name') || 'Ditt område';
 let STORES = [];
 let ALL_STORES = [];
 let deals = [];
+let ALL_DEALS = [];
 let catalogLoading = true, catalogError = null;
 let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
 let vfMap = null, vfMapMarkers = {};
@@ -115,9 +116,18 @@ function mapStoreRow(r){
     lat:r.lat!=null?Number(r.lat):null, lng:r.lng!=null?Number(r.lng):null, areaId:r.area_id };
 }
 function saveFollowed(){ localStorage.setItem('vf_followed_stores', JSON.stringify(Array.from(followedStoreIds))); }
+function recomputeScope(){
+  if(followedStoreIds.size){
+    STORES = ALL_STORES.filter(s=>followedStoreIds.has(s.id));
+  } else if(currentAreaId){
+    STORES = ALL_STORES.filter(s=>s.areaId===currentAreaId);
+  } else STORES = [];
+  const ids = new Set(STORES.map(s=>s.id));
+  deals = ALL_DEALS.filter(d=>ids.has(d.store));
+}
 function toggleFollow(storeId){
   if(followedStoreIds.has(storeId)) followedStoreIds.delete(storeId); else followedStoreIds.add(storeId);
-  saveFollowed(); loadCatalog();
+  saveFollowed(); recomputeScope(); render();
 }
 function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
@@ -138,16 +148,12 @@ async function loadCatalog(){
     await loadAreas();
     const allRows = await supa.selectRaw('stores?select=*&active=eq.true&order=name.asc');
     ALL_STORES = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
-    if(followedStoreIds.size){
-      STORES = ALL_STORES.filter(s=>followedStoreIds.has(s.id));
-    } else if(currentAreaId){
-      STORES = ALL_STORES.filter(s=>s.areaId===currentAreaId);
-    } else STORES = [];
-    const ids = STORES.map(s=>s.id);
-    if(ids.length){
-      const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${ids.join(',')})&order=scraped_at.desc`);
-      deals = Array.isArray(dealRows) ? dealRows.map(mapDealRow) : [];
-    } else deals = [];
+    const allIds = ALL_STORES.map(s=>s.id);
+    if(allIds.length){
+      const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${allIds.join(',')})&order=scraped_at.desc`);
+      ALL_DEALS = Array.isArray(dealRows) ? dealRows.map(mapDealRow) : [];
+    } else ALL_DEALS = [];
+    recomputeScope();
   }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
   catalogLoading = false; render();
 }
@@ -155,7 +161,7 @@ function switchArea(id){
   const a = AREAS.find(x=>x.id===id); if(!a) return;
   currentAreaId = a.id; currentAreaName = a.name;
   localStorage.setItem('vf_area_id', a.id); localStorage.setItem('vf_area_name', a.name);
-  loadCatalog();
+  recomputeScope(); render();
 }
 
 // ── Vecka ─────────────────────────────────────────────────
@@ -437,22 +443,22 @@ function storeCard(st, count, save, top, followed){
     </div>`;
 }
 function viewStores(){
-  const list = followedStoreIds.size ? STORES : STORES;
+  const list = ALL_STORES;
   const cards = list.map(st=>{
-    const items = deals.filter(o=>o.store===st.id);
+    const items = ALL_DEALS.filter(o=>o.store===st.id);
     const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
     const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
       .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
     return { st, count:items.length, save, top };
-  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
-  const heading = followedStoreIds.size ? `Dina ${followedStoreIds.size} valda butiker` : 'Butiker i närheten';
-  const sub = followedStoreIds.size ? 'Klicka på kartan för att lägga till eller ta bort butiker' : 'Klicka på en butik på kartan för att följa den, oavsett område';
+  }).sort((a,b)=>(followedStoreIds.has(b.st.id)-followedStoreIds.has(a.st.id))||(b.count-a.count)).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
+  const heading = followedStoreIds.size ? `Alla butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
+  const sub = 'Klicka på en butik eller en nål på kartan för att följa den, oavsett område';
   return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
     <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
     ${followedStoreIds.size?`<button onclick="clearFollowed()" style="margin-bottom:16px;padding:10px 16px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Rensa valda butiker</button>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}</div>`;
 }
-function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); loadCatalog(); }
+function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); recomputeScope(); render(); }
 function renderStoreMap(){
   const el = document.getElementById('vf-map');
   if(!el || typeof L === 'undefined' || !ALL_STORES.length) return;
