@@ -442,21 +442,33 @@ function storeCard(st, count, save, top, followed){
       <button onclick="toggleFollow('${st.id}')" style="margin-top:14px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:13.5px;font-family:${FAM};border:1px solid ${followed?'#E0552E':'#E3D8C6'};background:${followed?'#FBEAE2':'#fff'};color:${followed?'#C2431F':'#6A5E50'};cursor:pointer;">${followed?'✓ Följer den här butiken':'+ Följ den här butiken'}</button>
     </div>`;
 }
+function storeCardData(st){
+  const items = ALL_DEALS.filter(o=>o.store===st.id);
+  const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
+  const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
+    .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
+  return { st, count:items.length, save, top };
+}
 function viewStores(){
-  const list = ALL_STORES;
-  const cards = list.map(st=>{
-    const items = ALL_DEALS.filter(o=>o.store===st.id);
-    const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
-    const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
-      .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
-    return { st, count:items.length, save, top };
-  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
-  const heading = followedStoreIds.size ? `Alla butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
+  const byArea = {};
+  ALL_STORES.forEach(st=>{
+    const key = st.areaId || '_';
+    (byArea[key] = byArea[key] || []).push(st);
+  });
+  const areaIds = Object.keys(byArea).sort((a,b)=>(a===currentAreaId?-1:b===currentAreaId?1:0));
+  const sections = areaIds.map(areaId=>{
+    const areaName = (AREAS.find(a=>a.id===areaId)||{}).name || 'Övrigt';
+    const cards = byArea[areaId].map(storeCardData).sort((a,b)=>b.count-a.count)
+      .map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
+    return `<div style="margin:22px 0 10px;font-weight:800;font-family:${DISP};font-size:14px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">📍 ${esc(areaName)}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
+  }).join('');
+  const heading = followedStoreIds.size ? `Butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
   const sub = 'Klicka på en butik eller en nål på kartan för att följa den, oavsett område';
   return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
     <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
     ${followedStoreIds.size?`<button onclick="clearFollowed()" style="margin-bottom:16px;padding:10px 16px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Rensa valda butiker</button>`:''}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}</div>`;
+    ${sections || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}`;
 }
 function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); recomputeScope(); render(); }
 function renderStoreMap(){
