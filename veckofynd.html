@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   .vf-pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(42,33,26,.35);border:2px solid #fff;}
   .vf-pin span{transform:rotate(45deg);font-size:14px;}
@@ -34,15 +35,63 @@
 // ── Supabase ──────────────────────────────────────────────
 const SUPA_URL = 'https://ihyolgjmppzgxhifhooh.supabase.co';
 const SUPA_KEY = 'sb_publishable_rm6yWqFKFiFR3dGaIPnV5w_6r0Jbsx4';
-const SUPA_HEAD = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' };
+const sbAuth = supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
+async function authHeaders(){
+  const { data } = await sbAuth.auth.getSession();
+  session = data.session || null;
+  const token = session ? session.access_token : SUPA_KEY;
+  return { apikey: SUPA_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
 const supa = {
-  async selectRaw(path){ const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: SUPA_HEAD }); return r.json(); },
-  async delete(table, id){ await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'DELETE', headers: SUPA_HEAD }); },
-  async update(table, id, data){ await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'PATCH', headers:{...SUPA_HEAD, Prefer:'return=minimal'}, body: JSON.stringify(data) }); },
-  async insert(table, row){ return fetch(`${SUPA_URL}/rest/v1/${table}`, { method:'POST', headers:{...SUPA_HEAD, Prefer:'resolution=merge-duplicates'}, body: JSON.stringify(row) }); }
+  async selectRaw(path){ const h = await authHeaders(); const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: h }); return r.json(); },
+  async delete(table, id){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'DELETE', headers: h }); },
+  async deleteWhere(table, filter){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`, { method:'DELETE', headers: h }); },
+  async update(table, id, data){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'PATCH', headers:{...h, Prefer:'return=minimal'}, body: JSON.stringify(data) }); },
+  async insert(table, row){ const h = await authHeaders(); return fetch(`${SUPA_URL}/rest/v1/${table}`, { method:'POST', headers:{...h, Prefer:'resolution=merge-duplicates'}, body: JSON.stringify(row) }); }
 };
 let lastLocalWrite = 0, lastDataHash = '';
 function markWrite(){ lastLocalWrite = Date.now(); }
+
+// ── Auth & hushåll ────────────────────────────────────────
+let session = null, authEmailSent = false;
+let household = null, householdMembers = [], householdInvites = [];
+async function loadAuthAndHousehold(){
+  const { data } = await sbAuth.auth.getSession();
+  session = data.session || null;
+  if(!session){ household=null; householdMembers=[]; householdInvites=[]; render(); return; }
+  try{
+    const mems = await supa.selectRaw('household_members?select=*');
+    const mine = Array.isArray(mems) ? mems.find(m=>m.user_id===session.user.id) : null;
+    if(mine){
+      const hh = await supa.selectRaw(`households?select=*&id=eq.${mine.household_id}`);
+      household = Array.isArray(hh) && hh[0] ? hh[0] : {id:mine.household_id};
+      const roster = await supa.selectRaw(`household_members?select=*&household_id=eq.${mine.household_id}&order=joined_at.asc`);
+      householdMembers = Array.isArray(roster) ? roster : [];
+      const invites = await supa.selectRaw(`household_invites?select=*&household_id=eq.${mine.household_id}`);
+      householdInvites = Array.isArray(invites) ? invites : [];
+    }
+  }catch(e){ /* tyst */ }
+  render();
+  loadShoppingList();
+}
+async function sendLoginLink(){
+  const email = (document.getElementById('auth_email')||{}).value||'';
+  if(!email.trim()) return;
+  authEmailSent = true; render();
+  try{ await sbAuth.auth.signInWithOtp({ email: email.trim(), options:{ emailRedirectTo: window.location.href } }); }catch(e){ /* tyst */ }
+}
+async function signOut(){ await sbAuth.auth.signOut(); session=null; household=null; householdMembers=[]; householdInvites=[]; shoppingList=[]; render(); }
+async function inviteFamilyMember(){
+  const el = document.getElementById('invite_email');
+  const email = (el||{}).value||'';
+  if(!email.trim() || !household) return;
+  if(householdMembers.length + householdInvites.length >= 5){ return; }
+  try{ await supa.insert('household_invites', { household_id: household.id, email: email.trim().toLowerCase(), invited_by: session.user.id }); }catch(e){ /* tyst */ }
+  if(el) el.value='';
+  loadAuthAndHousehold();
+}
+async function cancelInvite(inviteId){ try{ await supa.deleteWhere('household_invites', `id=eq.${inviteId}`); }catch(e){} loadAuthAndHousehold(); }
+async function removeFamilyMember(userId){ try{ await supa.deleteWhere('household_members', `user_id=eq.${userId}`); }catch(e){} loadAuthAndHousehold(); }
 
 // ── Data (från Supabase, multi-område) ──────────────────────
 const CHAIN_FALLBACK = {
@@ -208,8 +257,9 @@ const PRESET_RECIPES = [
 // ── Supabase-sync ─────────────────────────────────────────
 async function loadShoppingList(){
   if (Date.now() - lastLocalWrite < 3500) return;
+  if(!session || !household){ if(shoppingList.length){ shoppingList=[]; render(); } return; }
   try{
-    const data = await supa.selectRaw('shopping_list?select=*');
+    const data = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}`);
     if(!Array.isArray(data)) return;
     const hash = JSON.stringify(data.map(r=>[r.id,r.checked,r.qty]).sort());
     if(hash===lastDataHash) return;
@@ -220,10 +270,11 @@ async function loadShoppingList(){
 }
 function inList(id){ return shoppingList.some(i=>i.id===id); }
 async function addOffer(id){
+  if(!session || !household){ tab='lista'; render(); return; }
   const o = deals.find(d=>d.id===id); if(!o||inList(id)) return;
   const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
   shoppingList.push(item); markWrite(); render();
-  try{ await supa.insert('shopping_list', { id:item.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('shopping_list', { id:item.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
 }
 async function toggleItem(id){
   const it = shoppingList.find(i=>i.id===id); if(!it) return;
@@ -235,6 +286,7 @@ async function removeItem(id){
   try{ await supa.delete('shopping_list', id); }catch(e){ /* tyst */ }
 }
 async function submitCustom(){
+  if(!session || !household){ sheet=null; tab='lista'; render(); return; }
   const name=(document.getElementById('f_name')||{}).value||'';
   if(!name.trim()) return;
   const store=(document.getElementById('f_store')||{}).value||'ovrigt';
@@ -243,7 +295,7 @@ async function submitCustom(){
   const id = Date.now();
   const item = { id, store, product:name.trim(), detail:'', price:0, origPrice:0, unit:'', category:c, emoji:CAT_EMOJI[c]||'🛒', checked:false, qty, isCustom:true };
   shoppingList.push(item); markWrite(); sheet=null; tab='lista'; render();
-  try{ await supa.insert('shopping_list', { id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('shopping_list', { id, household_id:household.id, added_by:session.user.id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
 }
 async function submitOffer(){
   const name=(document.getElementById('f_name')||{}).value||'';
@@ -422,7 +474,45 @@ function renderStoreMap(){
   if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
   setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
 }
+function loginGate(){
+  return `<div style="text-align:center;padding:40px 20px;">
+    <div style="font-size:48px;">🔐</div>
+    <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Logga in för att se listan</div>
+    <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:320px;margin-left:auto;margin-right:auto;">Inköpslistan delas inom ditt hushåll (upp till 5 mailadresser). Ange din mail så skickar vi en inloggningslänk.</div>
+    ${authEmailSent ? `<div style="margin-top:20px;background:#EAF1E3;color:#3E6632;padding:14px;border-radius:14px;font-weight:700;font-size:14px;max-width:320px;margin-left:auto;margin-right:auto;">✓ Länk skickad! Kolla din mail och klicka på länken.</div>` :
+    `<div style="margin-top:20px;display:flex;gap:8px;max-width:340px;margin-left:auto;margin-right:auto;">
+      <input id="auth_email" type="email" placeholder="din@mail.se" style="flex:1;padding:12px;border-radius:12px;border:1px solid #E3D8C6;font-size:15px;font-family:${FAM};outline:none;">
+      <button onclick="sendLoginLink()" style="padding:12px 18px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-family:${FAM};cursor:pointer;">Skicka länk</button>
+    </div>`}
+  </div>`;
+}
+function householdPanel(){
+  if(!session) return '';
+  const myId = session.user.id;
+  const isOwner = householdMembers.some(m=>m.user_id===myId && m.is_owner);
+  const total = householdMembers.length + householdInvites.length;
+  const memberRows = householdMembers.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
+      <span style="font-size:13.5px;">${esc(m.email)}${m.is_owner?' 👑':''}${m.user_id===myId?' (du)':''}</span>
+      ${(isOwner && m.user_id!==myId) ? `<button onclick="removeFamilyMember('${m.user_id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Ta bort</button>` : ''}
+    </div>`).join('');
+  const inviteRows = householdInvites.map(i=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
+      <span style="font-size:13.5px;color:#8A7E6E;">${esc(i.email)} · väntar</span>
+      ${isOwner ? `<button onclick="cancelInvite('${i.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Avbryt</button>` : ''}
+    </div>`).join('');
+  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span style="font-weight:800;font-family:${DISP};font-size:15px;">👨‍👩‍👧‍👦 Ditt hushåll (${total}/5)</span>
+      <button onclick="signOut()" style="border:none;background:none;color:#8A7E6E;font-size:12px;cursor:pointer;text-decoration:underline;">Logga ut</button>
+    </div>
+    ${memberRows}${inviteRows}
+    ${isOwner && total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
+      <input id="invite_email" type="email" placeholder="familjemedlems mail" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
+      <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
+    </div>` : (total>=5 ? `<div style="margin-top:8px;font-size:12px;color:#8A7E6E;">Hushållet är fullt (max 5).</div>` : '')}
+  </div>`;
+}
 function viewList(){
+  if(!session) return loginGate();
   // ── Sökruta ───────────────────────────────────────────────
   const searchBox = `<div style="margin-bottom:18px;">
     <div style="background:linear-gradient(135deg,#2A211A,#4A3728);border-radius:20px;padding:18px 20px;color:#fff;margin-bottom:14px;">
@@ -433,9 +523,10 @@ function viewList(){
     </div>
     ${searchDone && searchResults ? renderSearchResults() : ''}
   </div>`;
+  const hh = householdPanel();
 
   if(!shoppingList.length){
-    return searchBox + `<div style="text-align:center;padding:40px 20px;">
+    return hh + searchBox + `<div style="text-align:center;padding:40px 20px;">
       <div style="font-size:54px;">🧺</div>
       <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Listan är tom</div>
       <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Lägg till fynd härifrån eller bläddra bland erbjudandena.</div>
@@ -465,7 +556,7 @@ function viewList(){
       <div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>
     </div>`;
   }).join('');
-  return searchBox + `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
+  return hh + searchBox + `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
       <div style="flex:1;"><div style="font-size:12.5px;opacity:.65;">${shoppingList.length} varor att handla</div><div style="font-family:${DISP};font-weight:800;font-size:32px;line-height:1;margin-top:4px;">${kr(totalPrice)}</div></div>
       <div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Du sparar</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#9FD27E;margin-top:3px;">-${kr(totalSaved)}</div></div>
     </div>${groups}`;
@@ -566,7 +657,7 @@ async function generateRecipes(){
   render();
   try{
     const res = await fetch(`${SUPA_URL}/functions/v1/generate-recipe`, {
-      method:'POST', headers: SUPA_HEAD,
+      method:'POST', headers: await authHeaders(),
       body: JSON.stringify({ deals: deals, request: recipeQuery })
     });
     const data = await res.json();
@@ -658,7 +749,8 @@ function setMode(m){ mode=m; render(); }
 // ── Init ──────────────────────────────────────────────────
 render();
 loadCatalog();
-loadShoppingList();
+sbAuth.auth.onAuthStateChange((_event, sess)=>{ session = sess; loadAuthAndHousehold(); });
+loadAuthAndHousehold();
 setInterval(loadShoppingList, 5000);
 </script>
 </body>
