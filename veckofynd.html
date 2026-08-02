@@ -216,7 +216,7 @@ function searchDeals(){
   const terms = searchInput.split(/[,\n]+/).map(t=>t.trim()).filter(Boolean);
   searchResults = terms.map(term => {
     const n = normalize(term);
-    const hits = deals.filter(d => {
+    const hits = ALL_DEALS.filter(d => {
       const dp = normalize(d.product), dd = normalize(d.detail||'');
       return n.split(' ').every(w => dp.includes(w) || dd.includes(w));
     }).sort((a,b) => ((b.origPrice-b.price)/(b.origPrice||1)) - ((a.origPrice-a.price)/(a.origPrice||1)));
@@ -227,7 +227,7 @@ function searchDeals(){
 }
 
 function addSearchHit(dealId){
-  const d = deals.find(x=>x.id===dealId);
+  const d = ALL_DEALS.find(x=>x.id===dealId);
   if(d && !inList(d.id)) addItem(d);
 }
 let recipeQuery='', recipeLoading=false, recipeResult=null, recipeError=null;
