@@ -40,37 +40,57 @@ const supa = {
 let lastLocalWrite = 0, lastDataHash = '';
 function markWrite(){ lastLocalWrite = Date.now(); }
 
-// ── Data (riktig) ─────────────────────────────────────────
-const STORES = [
-  { id:"ica",       name:"ICA Supermarket Telefonplan", color:"#E2231A", logo:"🔴", logoUrl:"https://assets.icanet.se/image/upload/v1666726418/icase/Assets/icons/Logos/ICA.svg", address:"Tellusborgsvägen 87, Hägersten",  distance:"1.2 km", hours:"07–23", url:"https://www.ica.se/butiker/supermarket/hagersten/ica-supermarket-telefonplan-1004018/erbjudanden/" },
-  { id:"coop",      name:"Stora Coop Västberga",        color:"#00529B", logo:"🔵", logoUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Coop_logo.svg", address:"Västbergavägen 4, Hägersten",   distance:"1.3 km", hours:"07–23", url:"https://www.coop.se/butiker-erbjudanden/coop/stora-coop-vastberga/" },
-  { id:"willys",    name:"Willys Älvsjö",                color:"#E4002B", logo:"🟥", logoUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Willys_logo.svg", address:"Älvsjö Ängsväg 2-6, Älvsjö",    distance:"2.6 km", hours:"07–22", url:"https://www.willys.se/erbjudanden" },
-  { id:"matdax",    name:"MatDax Hagsätra",              color:"#FF6B00", logo:"🟠", logoUrl:"https://image-transformer-api.tjek.com/?u=s3://sgn-prd-assets/uploads/634e63/Ge0pzqz8RSFhwZhteiBYq&w=300", address:"Hagsätra torg 7-11, Bandhagen", distance:"3.8 km", hours:"07–22", url:"https://www.matdax.se/erbjudanden/" },
-  { id:"matvarlden",name:"Matvärlden Kungens Kurva",     color:"#7A4FBC", logo:"🟣", logoUrl:"https://www.matvarlden.se/uploads/logo.png", address:"Modulvägen 6, Kungens Kurva",   distance:"4.5 km", hours:"07–22", url:"" },
-  { id:"lidl",      name:"Lidl Liljeholmen",             color:"#0050AA", logo:"🔷", logoUrl:"https://upload.wikimedia.org/wikipedia/commons/9/91/Lidl-Logo.svg", address:"Liljeholmstorget 44, Liljeholmen", distance:"3.2 km", hours:"08–21", url:"https://www.lidl.se" },
-];
+// ── Data (från Supabase, multi-område) ──────────────────────
+const CHAIN_FALLBACK = {
+  ica:{color:"#E2231A",logo:"🔴"}, coop:{color:"#00529B",logo:"🔵"}, willys:{color:"#E4002B",logo:"🟥"},
+  matdax:{color:"#FF6B00",logo:"🟠"}, matvarlden:{color:"#7A4FBC",logo:"🟣"}, lidl:{color:"#0050AA",logo:"🔷"}, hemkop:{color:"#E6007E",logo:"💗"}
+};
+let AREAS = [];
+let currentAreaId = localStorage.getItem('vf_area_id') || null;
+let currentAreaName = localStorage.getItem('vf_area_name') || 'Ditt område';
+let STORES = [];
+let deals = [];
+let catalogLoading = true, catalogError = null;
 
-let deals = [
-  // ───────── ICA Supermarket Telefonplan – ica.se, Vecka 28 (fr.o.m. 6/7) ─────────
-  { id:901, store:"ica", product:"Gröna kärnfria druvor i ask", detail:"ICA · Egypten · 500g", price:25, origPrice:39.69, unit:"st", category:"Mejeri & Övrigt", emoji:"🍇", hot:true },
-  { id:902, store:"ica", product:"Kryddkorv", detail:"Scan · 180-300g · 3 för 75 kr · Max 1", price:25, origPrice:37.80, unit:"st", category:"Kött", emoji:"🌭", hot:false },
-  { id:903, store:"ica", product:"Färsk pasta", detail:"ICA · 200-250g", price:10, origPrice:20.74, unit:"st", category:"Pasta & Ris", emoji:"🍝", hot:true },
-  { id:904, store:"ica", product:"Baguetter", detail:"ICA · 300g", price:10, origPrice:17.93, unit:"st", category:"Mejeri & Övrigt", emoji:"🥖", hot:false },
-  { id:905, store:"ica", product:"Halländskt Bondbröd", detail:"ICA Selection · 1kg", price:30, origPrice:38.75, unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:906, store:"ica", product:"Risi-/Mannafrutti", detail:"Risifrutti · 165-175g · 4 för 40 kr · Max 1", price:10, origPrice:14.14, unit:"st", category:"Mejeri & Övrigt", emoji:"🍮", hot:false },
-  { id:907, store:"ica", product:"Färsk pizza", detail:"ICA · 385-400g · 2 för 75 kr", price:37.50, origPrice:51.59, unit:"st", category:"Pasta & Ris", emoji:"🍕", hot:false },
-  { id:908, store:"ica", product:"Köttbullar", detail:"ICA · 350g · 2 för 45 kr", price:22.50, origPrice:27.92, unit:"st", category:"Kött", emoji:"🍖", hot:false },
-  { id:909, store:"ica", product:"Röda linser", detail:"ICA I love eco · 400g · 2 för 40 kr", price:20, origPrice:28.34, unit:"st", category:"Pasta & Ris", emoji:"🫘", hot:false },
-  { id:910, store:"ica", product:"Vitost", detail:"Apetina · 150g · 2 för 35 kr", price:17.50, origPrice:23.31, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:911, store:"ica", product:"Lantbröd", detail:"Fazer · 600g", price:25, origPrice:36.86, unit:"st", category:"Mejeri & Övrigt", emoji:"🍞", hot:false },
-  { id:912, store:"ica", product:"Sommarpotatis i påse", detail:"ICA · Sverige · 900g · 2 för 25 kr", price:12.50, origPrice:18.09, unit:"st", category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
-  { id:913, store:"ica", product:"Skivad ost", detail:"Arla/Arla Ko/Wästgöta Kloster · 150g · 2 för 45 kr", price:22.50, origPrice:34.54, unit:"st", category:"Mejeri & Övrigt", emoji:"🧀", hot:false },
-  { id:914, store:"ica", product:"Påläggschark", detail:"Charkuterifabriken · 200-300g", price:30, origPrice:44.75, unit:"st", category:"Kött", emoji:"🥪", hot:false },
-  { id:915, store:"ica", product:"Västkustchips", detail:"Estrella · 160-180g · 2 för 40 kr", price:20, origPrice:32.13, unit:"st", category:"Mejeri & Övrigt", emoji:"🥔", hot:false },
-  { id:916, store:"ica", product:"Läsk", detail:"Trocadero/Loka Crush/Champis · 1,4-1,5L · 4 för 50 kr · +pant · Max 1", price:12.50, origPrice:18.88, unit:"st", category:"Mejeri & Övrigt", emoji:"🥤", hot:false },
-  { id:917, store:"ica", product:"Paraguayos i ask", detail:"ICA · Spanien · 500g", price:20, origPrice:39.69, unit:"st", category:"Mejeri & Övrigt", emoji:"🍑", hot:true },
-  { id:918, store:"ica", product:"Äpplen Royal Gala", detail:"ICA · Chile/Sydafrika", price:23, origPrice:28.51, unit:"kg", category:"Mejeri & Övrigt", emoji:"🍎", hot:false },
-];
+function mapStoreRow(r){
+  const fb = CHAIN_FALLBACK[r.chain] || {color:"#B6A893",logo:"🛒"};
+  return { id:r.id, name:r.name, color:r.color||fb.color, logo:fb.logo, logoUrl:r.logo_url,
+    address:r.address||'', distance:r.distance_km?`${r.distance_km} km`:'', hours:r.hours||'', url:(r.scrape_config&&r.scrape_config.offer_url)||r.website_url||'' };
+}
+function mapDealRow(r){
+  return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
+    origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price), unit:r.unit||'st', category:r.category||'Skafferivaror',
+    emoji:r.emoji||'🛒', hot:!!r.hot };
+}
+async function loadAreas(){
+  try{
+    const rows = await supa.selectRaw('areas?select=*&order=name.asc');
+    if(Array.isArray(rows)) AREAS = rows;
+    if(!currentAreaId && AREAS.length){ currentAreaId = AREAS[0].id; currentAreaName = AREAS[0].name; }
+    else if(currentAreaId){ const a = AREAS.find(x=>x.id===currentAreaId); if(a) currentAreaName = a.name; }
+  }catch(e){ /* offline */ }
+}
+async function loadCatalog(){
+  catalogLoading = true; catalogError = null; render();
+  try{
+    await loadAreas();
+    if(!currentAreaId){ catalogLoading=false; render(); return; }
+    const storeRows = await supa.selectRaw(`stores?select=*&area_id=eq.${currentAreaId}&active=eq.true&order=name.asc`);
+    STORES = Array.isArray(storeRows) ? storeRows.map(mapStoreRow) : [];
+    const ids = STORES.map(s=>s.id);
+    if(ids.length){
+      const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${ids.join(',')})&order=scraped_at.desc`);
+      deals = Array.isArray(dealRows) ? dealRows.map(mapDealRow) : [];
+    } else deals = [];
+  }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
+  catalogLoading = false; render();
+}
+function switchArea(id){
+  const a = AREAS.find(x=>x.id===id); if(!a) return;
+  currentAreaId = a.id; currentAreaName = a.name;
+  localStorage.setItem('vf_area_id', a.id); localStorage.setItem('vf_area_name', a.name);
+  loadCatalog();
+}
 
 // ── Vecka ─────────────────────────────────────────────────
 function getWeekInfo() {
@@ -91,11 +111,11 @@ function getWeekInfo() {
 
 // ── Design-tokens / hjälp ─────────────────────────────────
 const CAT_BG = {
-  'Kött':'#F7E5DC','Kyckling':'#F6E3D6','Fisk & Skaldjur':'#E0ECF2',
-  'Pasta & Ris':'#EFE7DA','Mejeri & Övrigt':'#FBEFD6','Hem & Hushåll':'#ECE6F2','Frukt & Grönt':'#E9F1DD'
+  'Frukt & Grönt':'#E9F1DD','Kött & Chark':'#F7E5DC','Mejeri':'#FBEFD6','Bröd, kex & bageri':'#F3E6CE',
+  'Skafferivaror':'#EFE7DA','Djupfryst':'#E0ECF2','Hem & fritid':'#ECE6F2','Hälsa & skönhet':'#F8E3ED'
 };
-const CAT_ORDER = ['Kött','Kyckling','Fisk & Skaldjur','Pasta & Ris','Mejeri & Övrigt','Hem & Hushåll'];
-const CAT_EMOJI = {'Kött':'🥩','Kyckling':'🍗','Fisk & Skaldjur':'🐟','Pasta & Ris':'🍝','Mejeri & Övrigt':'🥛','Hem & Hushåll':'🧴'};
+const CAT_ORDER = ['Frukt & Grönt','Kött & Chark','Mejeri','Bröd, kex & bageri','Skafferivaror','Djupfryst','Hem & fritid','Hälsa & skönhet'];
+const CAT_EMOJI = {'Frukt & Grönt':'🥬','Kött & Chark':'🥩','Mejeri':'🥛','Bröd, kex & bageri':'🍞','Skafferivaror':'🥫','Djupfryst':'🧊','Hem & fritid':'🧴','Hälsa & skönhet':'💊'};
 const FALLBACK_STORE = { name:'Övrigt', color:'#B6A893', distance:'' };
 function storeById(id){ return STORES.find(s=>s.id===id) || FALLBACK_STORE; }
 function storeLogo(st, size, radius){
@@ -230,6 +250,11 @@ function navBtn(key,label){
   const badge = key==='lista'&&shoppingList.length ? ' · '+shoppingList.length : '';
   return `<button onclick="go('${key}')" style="flex:1;padding:10px 8px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
 }
+function areaSwitcher(){
+  if(AREAS.length < 2) return '';
+  const opts = AREAS.map(a=>`<option value="${a.id}" ${a.id===currentAreaId?'selected':''}>${esc(a.name)}</option>`).join('');
+  return `<select onchange="switchArea(this.value)" style="height:42px;max-width:120px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:13px;font-weight:700;font-family:${FAM};color:#2A211A;cursor:pointer;padding:0 10px;" title="Byt område">${opts}</select>`;
+}
 function header(){
   const wi = getWeekInfo();
   return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
@@ -247,8 +272,9 @@ function header(){
       </div>
       <div style="flex:1;min-width:0;">
         <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 Hägersten · Vecka ${wi.week}</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentAreaName)} · Vecka ${wi.week}</div>
       </div>
+      ${areaSwitcher()}
       <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
     </div>
     <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
@@ -303,6 +329,8 @@ function offerCard(o){
   </div>`;
 }
 function viewOffers(){
+  if(catalogLoading) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">Hämtar veckans erbjudanden…</div>`;
+  if(catalogError) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">${esc(catalogError)}</div>`;
   const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
   const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
   const chipDefs = ['Alla'].concat(present);
@@ -314,7 +342,7 @@ function viewOffers(){
       <div style="flex:1;">
         <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
         <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
-        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i Hägersten-området</div>
+        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden i ${esc(currentAreaName)}</div>
       </div>
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
@@ -582,6 +610,7 @@ function setMode(m){ mode=m; render(); }
 
 // ── Init ──────────────────────────────────────────────────
 render();
+loadCatalog();
 loadShoppingList();
 setInterval(loadShoppingList, 5000);
 </script>
