@@ -450,7 +450,7 @@ function viewStores(){
     const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
       .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
     return { st, count:items.length, save, top };
-  }).sort((a,b)=>(followedStoreIds.has(b.st.id)-followedStoreIds.has(a.st.id))||(b.count-a.count)).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
+  }).sort((a,b)=>b.count-a.count).map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
   const heading = followedStoreIds.size ? `Alla butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
   const sub = 'Klicka på en butik eller en nål på kartan för att följa den, oavsett område';
   return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
