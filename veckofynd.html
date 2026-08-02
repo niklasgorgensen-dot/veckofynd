@@ -38,8 +38,8 @@ const SUPA_KEY = 'sb_publishable_rm6yWqFKFiFR3dGaIPnV5w_6r0Jbsx4';
 const sbAuth = supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 async function authHeaders(){
   const { data } = await sbAuth.auth.getSession();
-  session = data.session || null;
-  const token = session ? session.access_token : SUPA_KEY;
+  const s = data.session || null;
+  const token = s ? s.access_token : SUPA_KEY;
   return { apikey: SUPA_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 const supa = {
