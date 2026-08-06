@@ -150,7 +150,7 @@ function toggleFollow(storeId){
 function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
     origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price), unit:r.unit||'st', category:r.category||'Skafferivaror',
-    emoji:r.emoji||'🛒', hot:!!r.hot };
+    emoji:r.emoji||'🛒', hot:!!r.hot, validTo:r.valid_to||null };
 }
 async function loadAreas(){
   try{
@@ -168,7 +168,8 @@ async function loadCatalog(){
     ALL_STORES = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
     const allIds = ALL_STORES.map(s=>s.id);
     if(allIds.length){
-      const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${allIds.join(',')})&order=scraped_at.desc`);
+      const todayStr = new Date().toISOString().slice(0,10);
+      const dealRows = await supa.selectRaw(`deals?select=*&store_id=in.(${allIds.join(',')})&or=(valid_to.is.null,valid_to.gte.${todayStr})&order=scraped_at.desc`);
       ALL_DEALS = Array.isArray(dealRows) ? dealRows.map(mapDealRow) : [];
     } else ALL_DEALS = [];
     recomputeScope();
@@ -399,7 +400,12 @@ function offerCard(o){
   const member = detectMember(o);
   const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
   let details = o.detail||'';
-  if(o.limitedDays) details = (details?details+' · ':'')+'⏰ '+o.limitedDays;
+  if(o.validTo){
+    const WD=['sön','mån','tis','ons','tor','fre','lör'];
+    const vt=new Date(o.validTo+'T00:00:00'); const today=new Date(); today.setHours(0,0,0,0);
+    const daysLeft=Math.round((vt-today)/86400000);
+    if(daysLeft<=2){ details=(details?details+' · ':'')+(daysLeft<=0?'⏰ Sista dagen idag':`⏰ Gäller t.o.m. ${WD[vt.getDay()]}`); }
+  }
   const priceRow = `<div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
       <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>
       ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}${unitSuffix(o.unit)}</span>
