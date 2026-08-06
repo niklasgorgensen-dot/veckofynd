@@ -51,17 +51,29 @@ const supa = {
 };
 let lastLocalWrite = 0, lastDataHash = '';
 function markWrite(){ lastLocalWrite = Date.now(); }
+let toastMsg = null, toastTimer = null;
+function showToast(msg){
+  toastMsg = msg; render();
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastMsg=null; render(); }, 2400);
+}
+function toastView(){
+  if(!toastMsg) return '';
+  return `<div style="position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#2A211A;color:#fff;padding:12px 20px;border-radius:14px;font-size:13.5px;font-weight:700;box-shadow:0 8px 22px rgba(0,0,0,.25);z-index:999;white-space:nowrap;animation:vfFade .2s ease;">${esc(toastMsg)}</div>`;
+}
 
 // ── Auth & hushåll ────────────────────────────────────────
-let session = null, authEmailSent = false;
+let session = null, authEmailSent = false, householdLoadError = false;
 let household = null, householdMembers = [], householdInvites = [];
-async function loadAuthAndHousehold(){
+async function loadAuthAndHousehold(isRetry){
   const { data } = await sbAuth.auth.getSession();
   session = data.session || null;
-  if(!session){ household=null; householdMembers=[]; householdInvites=[]; render(); return; }
+  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; render(); return; }
+  householdLoadError = false;
   try{
     const mems = await supa.selectRaw('household_members?select=*');
-    const mine = Array.isArray(mems) ? mems.find(m=>m.user_id===session.user.id) : null;
+    if(!Array.isArray(mems)) throw new Error('bad response');
+    const mine = mems.find(m=>m.user_id===session.user.id);
     if(mine){
       const hh = await supa.selectRaw(`households?select=*&id=eq.${mine.household_id}`);
       household = Array.isArray(hh) && hh[0] ? hh[0] : {id:mine.household_id};
@@ -69,8 +81,14 @@ async function loadAuthAndHousehold(){
       householdMembers = Array.isArray(roster) ? roster : [];
       const invites = await supa.selectRaw(`household_invites?select=*&household_id=eq.${mine.household_id}`);
       householdInvites = Array.isArray(invites) ? invites : [];
+    } else if(!isRetry){
+      // Brand-new signup: the DB trigger that creates the household may not have committed yet.
+      setTimeout(()=>loadAuthAndHousehold(true), 1200);
+      return;
+    } else {
+      householdLoadError = true;
     }
-  }catch(e){ /* tyst */ }
+  }catch(e){ householdLoadError = true; }
   render();
   loadShoppingList();
 }
@@ -276,10 +294,12 @@ async function loadShoppingList(){
 }
 function inList(id){ return shoppingList.some(i=>i.id===id); }
 async function addOffer(id){
-  if(!session || !household){ tab='lista'; render(); return; }
-  const o = deals.find(d=>d.id===id); if(!o||inList(id)) return;
+  if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
+  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
+  const o = deals.find(d=>d.id===id); if(!o) return;
+  if(inList(id)){ showToast('Redan på listan'); return; }
   const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
-  shoppingList.push(item); markWrite(); render();
+  shoppingList.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list', { id:item.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
 }
 async function toggleItem(id){
@@ -292,7 +312,8 @@ async function removeItem(id){
   try{ await supa.delete('shopping_list', id); }catch(e){ /* tyst */ }
 }
 async function submitCustom(){
-  if(!session || !household){ sheet=null; tab='lista'; render(); return; }
+  if(!session){ showToast('🔐 Logga in för att lägga till på listan'); sheet=null; tab='lista'; render(); return; }
+  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); sheet=null; tab='lista'; render(); return; }
   const name=(document.getElementById('f_name')||{}).value||'';
   if(!name.trim()) return;
   const store=(document.getElementById('f_store')||{}).value||'ovrigt';
@@ -300,7 +321,7 @@ async function submitCustom(){
   const qty=Math.max(1, parseInt((document.getElementById('f_qty')||{}).value||'1')||1);
   const id = Date.now();
   const item = { id, store, product:name.trim(), detail:'', price:0, origPrice:0, unit:'', category:c, emoji:CAT_EMOJI[c]||'🛒', checked:false, qty, isCustom:true };
-  shoppingList.push(item); markWrite(); sheet=null; tab='lista'; render();
+  shoppingList.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list', { id, household_id:household.id, added_by:session.user.id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
 }
 async function submitOffer(){
@@ -531,6 +552,14 @@ function householdPanel(){
 }
 function viewList(){
   if(!session) return loginGate();
+  if(!household){
+    return `<div style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;">⚠️</div>
+      <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Kunde inte ladda ditt hushåll</div>
+      <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Du är inloggad som ${esc(session.user.email||'')}, men något gick fel när listan skulle hämtas.</div>
+      <button onclick="loadAuthAndHousehold()" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Försök igen</button>
+    </div>`;
+  }
   // ── Sökruta ───────────────────────────────────────────────
   const searchBox = `<div style="margin-bottom:18px;">
     <div style="background:linear-gradient(135deg,#2A211A,#4A3728);border-radius:20px;padding:18px 20px;color:#fff;margin-bottom:14px;">
@@ -755,7 +784,7 @@ function render(){
   document.getElementById('app').innerHTML =
     header() +
     `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
-    fab() + sheetView();
+    fab() + sheetView() + toastView();
   if(tab==='butiker' && !catalogLoading) setTimeout(renderStoreMap, 0);
 }
 function go(t){ tab=t; if(t!=='erbjudanden') cat='Alla'; render(); }
