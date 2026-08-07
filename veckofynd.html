@@ -334,7 +334,8 @@ async function submitOffer(){
   const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
   const sale=Number(saleV); const ord=Number((document.getElementById('f_ord')||{}).value)||sale;
   const id = Date.now();
-  deals.unshift({ id, store:store||'ovrigt', product:name.trim(), detail:details||'Eget tillägg', price:sale, origPrice:ord, unit:'st', category:c, emoji:CAT_EMOJI[c]||'🛒', hot:false });
+  const manualDeal = { id, store:store||'ovrigt', product:name.trim(), detail:details||'Eget tillägg', price:sale, origPrice:ord, unit:'st', category:c, emoji:CAT_EMOJI[c]||'🛒', hot:false };
+  ALL_DEALS.unshift(manualDeal); deals.unshift(manualDeal);
   sheet=null; tab='erbjudanden'; cat='Alla'; render();
 }
 
@@ -681,13 +682,15 @@ function toggleDesc(uid){
 let recipeCardSeq = 0;
 function recipeCard(r){
   const uid = 'r' + (recipeCardSeq++);
-  const usedIds = new Set(r.dealIdsUsed||[]);
   const descHtml = r.description ? `<div style="margin-bottom:12px;">
       <span id="desc_${uid}" data-expanded="0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;color:#5A4F43;line-height:1.5;">${esc(r.description)}</span>
       <span id="descbtn_${uid}" onclick="toggleDesc('${uid}')" style="display:inline-block;margin-top:4px;color:#4F7A3F;font-weight:700;cursor:pointer;font-size:12.5px;">Läs mer…</span>
     </div>` : '';
+  let matchCount = 0;
   const ingRows = (r.ingredients||[]).map(ing=>{
-    const d = ing.fromDealId!=null ? deals.find(x=>x.id===ing.fromDealId) : null;
+    const n = normalize(ing.name||'');
+    const d = n ? deals.find(x=>{ const dp=normalize(x.product); return dp && (dp.includes(n)||n.includes(dp)); }) : null;
+    if(d) matchCount++;
     const tag = d ? `<span style="margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:3px 8px;border-radius:8px;">${esc(storeById(d.store).name)} · ${kr(d.price)}${unitSuffix(d.unit)}</span>` : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(ing.amount||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
   }).join('');
@@ -695,7 +698,7 @@ function recipeCard(r){
   return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
     <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:4px;">
       <div style="flex:1;font-family:${DISP};font-weight:800;font-size:18px;line-height:1.2;">${esc(r.title||'Recept')}</div>
-      <div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${usedIds.size} fynd använda</div>
+      ${matchCount?`<div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${matchCount} fynd använda</div>`:''}
     </div>
     <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:10px;">${r.servings?`${r.servings} port · `:''}${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost)} totalt`:''}</div>
     ${descHtml}
