@@ -116,6 +116,9 @@ const CHAIN_FALLBACK = {
   ica:{color:"#E2231A",logo:"🔴"}, coop:{color:"#00529B",logo:"🔵"}, willys:{color:"#E4002B",logo:"🟥"},
   matdax:{color:"#FF6B00",logo:"🟠"}, matvarlden:{color:"#7A4FBC",logo:"🟣"}, lidl:{color:"#0050AA",logo:"🔷"}, hemkop:{color:"#E6007E",logo:"💗"}
 };
+let CITIES = [];
+let currentCityId = localStorage.getItem('vf_city_id') || null;
+let currentCityName = localStorage.getItem('vf_city_name') || 'Din stad';
 let AREAS = [];
 let currentAreaId = localStorage.getItem('vf_area_id') || null;
 let currentAreaName = localStorage.getItem('vf_area_name') || 'Ditt område';
@@ -154,10 +157,16 @@ function mapDealRow(r){
 }
 async function loadAreas(){
   try{
+    const cityRows = await supa.selectRaw('cities?select=*&order=name.asc');
+    if(Array.isArray(cityRows)) CITIES = cityRows;
     const rows = await supa.selectRaw('areas?select=*&order=name.asc');
     if(Array.isArray(rows)) AREAS = rows;
-    if(!currentAreaId && AREAS.length){ currentAreaId = AREAS[0].id; currentAreaName = AREAS[0].name; }
-    else if(currentAreaId){ const a = AREAS.find(x=>x.id===currentAreaId); if(a) currentAreaName = a.name; }
+    if(!currentCityId && CITIES.length){ currentCityId = CITIES[0].id; currentCityName = CITIES[0].name; }
+    else if(currentCityId){ const c = CITIES.find(x=>x.id===currentCityId); if(c) currentCityName = c.name; }
+    const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
+    if((!currentAreaId || !areasInCity.some(a=>a.id===currentAreaId)) && areasInCity.length){
+      currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
+    } else if(currentAreaId){ const a = AREAS.find(x=>x.id===currentAreaId); if(a) currentAreaName = a.name; }
   }catch(e){ /* offline */ }
 }
 async function loadCatalog(){
@@ -175,6 +184,17 @@ async function loadCatalog(){
     recomputeScope();
   }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
   catalogLoading = false; render();
+}
+function switchCity(id){
+  const c = CITIES.find(x=>x.id===id); if(!c) return;
+  currentCityId = c.id; currentCityName = c.name;
+  localStorage.setItem('vf_city_id', c.id); localStorage.setItem('vf_city_name', c.name);
+  const areasInCity = AREAS.filter(a=>a.city_id===id);
+  if(areasInCity.length){
+    currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
+    localStorage.setItem('vf_area_id', currentAreaId); localStorage.setItem('vf_area_name', currentAreaName);
+  }
+  recomputeScope(); render();
 }
 function switchArea(id){
   const a = AREAS.find(x=>x.id===id); if(!a) return;
@@ -349,9 +369,15 @@ function navBtn(key,label){
   return `<button onclick="go('${key}')" style="flex:1;padding:10px 8px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
 }
 function areaSwitcher(){
-  if(AREAS.length < 2) return '';
-  const opts = AREAS.map(a=>`<option value="${a.id}" ${a.id===currentAreaId?'selected':''}>${esc(a.name)}</option>`).join('');
-  return `<select onchange="switchArea(this.value)" style="height:42px;max-width:120px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:13px;font-weight:700;font-family:${FAM};color:#2A211A;cursor:pointer;padding:0 10px;" title="Byt område">${opts}</select>`;
+  const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
+  if(CITIES.length < 2 && areasInCity.length < 2) return '';
+  const cityOpts = CITIES.map(c=>`<option value="${c.id}" ${c.id===currentCityId?'selected':''}>${esc(c.name)}</option>`).join('');
+  const areaOpts = areasInCity.map(a=>`<option value="${a.id}" ${a.id===currentAreaId?'selected':''}>${esc(a.name)}</option>`).join('');
+  const selStyle = `height:42px;max-width:104px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:13px;font-weight:700;font-family:${FAM};color:#2A211A;cursor:pointer;padding:0 8px;`;
+  return `<div style="display:flex;gap:6px;">
+    ${CITIES.length>1?`<select onchange="switchCity(this.value)" style="${selStyle}" title="Byt stad">${cityOpts}</select>`:''}
+    ${areasInCity.length>1?`<select onchange="switchArea(this.value)" style="${selStyle}" title="Byt område">${areaOpts}</select>`:''}
+  </div>`;
 }
 function header(){
   const wi = getWeekInfo();
@@ -370,7 +396,7 @@ function header(){
       </div>
       <div style="flex:1;min-width:0;">
         <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentAreaName)} · Vecka ${wi.week}</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
       </div>
       ${areaSwitcher()}
       <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
@@ -483,12 +509,19 @@ function viewStores(){
     const key = st.areaId || '_';
     (byArea[key] = byArea[key] || []).push(st);
   });
-  const areaIds = Object.keys(byArea).sort((a,b)=>(a===currentAreaId?-1:b===currentAreaId?1:0));
+  const areaIds = Object.keys(byArea).filter(areaId=>{
+    const a = AREAS.find(x=>x.id===areaId);
+    const inCurrentCity = a ? a.city_id===currentCityId : false;
+    const hasFollowed = byArea[areaId].some(st=>followedStoreIds.has(st.id));
+    return inCurrentCity || hasFollowed;
+  }).sort((a,b)=>(a===currentAreaId?-1:b===currentAreaId?1:0));
   const sections = areaIds.map(areaId=>{
-    const areaName = (AREAS.find(a=>a.id===areaId)||{}).name || 'Övrigt';
+    const areaRow = AREAS.find(a=>a.id===areaId) || {};
+    const areaName = areaRow.name || 'Övrigt';
+    const cityLabel = areaRow.city_id && areaRow.city_id!==currentCityId ? ` · ${esc((CITIES.find(c=>c.id===areaRow.city_id)||{}).name||'')}` : '';
     const cards = byArea[areaId].map(storeCardData).sort((a,b)=>b.count-a.count)
       .map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
-    return `<div style="margin:22px 0 10px;font-weight:800;font-family:${DISP};font-size:14px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">📍 ${esc(areaName)}</div>
+    return `<div style="margin:22px 0 10px;font-weight:800;font-family:${DISP};font-size:14px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">📍 ${esc(areaName)}${cityLabel}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
   }).join('');
   const heading = followedStoreIds.size ? `Butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
@@ -507,7 +540,11 @@ function renderStoreMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
   vfMapMarkers = {};
   const pts = [];
-  ALL_STORES.forEach(st=>{
+  const mapStores = ALL_STORES.filter(st=>{
+    const a = AREAS.find(x=>x.id===st.areaId);
+    return (a && a.city_id===currentCityId) || followedStoreIds.has(st.id);
+  });
+  mapStores.forEach(st=>{
     if(st.lat==null || st.lng==null) return;
     pts.push([st.lat, st.lng]);
     const followed = followedStoreIds.has(st.id);
