@@ -273,6 +273,33 @@ function addSearchHit(dealId){
 }
 let RECIPES = [], recipesLoadedForCity = null, recipeCat = 'alla';
 let recipeBudget = localStorage.getItem('vf_recipe_budget') || '';
+function header(){
+  const wi = getWeekInfo();
+  return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
+    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;flex:none;border-radius:14px;background:#E0552E;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(224,85,46,.32);">
+        <svg width="26" height="26" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VeckoFynd">
+          <g transform="rotate(45 54 60)">
+            <path d="M30 36 L78 36 Q90 36 90 48 L90 72 Q90 84 78 84 L42 84 Q30 84 30 72 Z" fill="#FBF6EE"></path>
+            <circle cx="45" cy="51" r="7" fill="#E0552E"></circle>
+          </g>
+          <path d="M54 20 C54 12 49 6 41 5 C41 13 46 19 54 20 Z" fill="#FBF6EE"></path>
+          <path d="M54 20 C54 13 58 8 65 7 C65 14 61 19 54 20 Z" fill="#FBF6EE" opacity="0.72"></path>
+          <rect x="52.4" y="19" width="3.2" height="12" rx="1.6" fill="#FBF6EE"></rect>
+        </svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
+      </div>
+      ${areaSwitcher()}
+      <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
+    </div>
+    <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
+    </nav>
+  </header>`;
+}
 const RECIPE_CAT_LABELS = {protein:'💪 Proteinrikt', healthy:'🥗 Hälsosamt', family:'👨‍👩‍👧 Familj', vegetarian:'🌱 Vegetariskt'};
 async function loadRecipes(){
   if(recipesLoadedForCity === currentCityId) return;
