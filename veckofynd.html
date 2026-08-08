@@ -269,453 +269,23 @@ function addSearchHit(dealId){
   const d = ALL_DEALS.find(x=>x.id===dealId);
   if(d && !inList(d.id)) addItem(d);
 }
-let recipeQuery='', recipeLoading=false, recipeResult=null, recipeError=null;
-const PRESET_RECIPES = [
-  {title:"Grillad fläskkarré med grillost och potatissallad",description:"En klassisk svensk grillmiddag som aldrig sviker. Den saftiga fläskkarrén får sällskap av smältande grillost direkt från grillen, och den krämiga potatissalladen balanserar allt med syra och friskhet. Perfekt när du vill ha något mättande utan krångel en vardagskväll.",servings:4,dealIdsUsed:[305,1007,1026,1108],ingredients:[{name:"Fläskkarré",amount:"1 kg",fromDealId:1026},{name:"Grillost",amount:"1 st",fromDealId:1007},{name:"Potatissallad",amount:"1 st (250g)",fromDealId:305},{name:"Bladpersilja",amount:"till garnering",fromDealId:1108}],steps:["Krydda fläskkarrén med salt och peppar, grilla ca 6-8 min per sida tills innertemp 65°C.","Lägg grillosten på grillen sista 2 minuterna tills den mjuknar och får grillränder.","Servera med potatissallad och toppa med hackad bladpersilja."],estimatedTotalCost:124.7},
-  {title:"Kycklingburgare med tomat och isbergssallad",description:"Snabblagad och barnvänlig burgarmiddag som är klar på under 20 minuter. Kycklingburgaren är mildare i smak än nötburgaren och passar bra ihop med krispig sallad och söta körsbärstomater. Toppa gärna med din favoritsås.",servings:4,dealIdsUsed:[1009,1092,1109,1110],ingredients:[{name:"Kycklingburgare",amount:"4 st",fromDealId:1009},{name:"Hamburgare-/korvbröd",amount:"4 st",fromDealId:1092},{name:"Isbergssallad",amount:"300 g",fromDealId:1110},{name:"Körsbärstomater",amount:"1 förp",fromDealId:1109}],steps:["Grilla eller stek kycklingburgarna enligt förpackningen tills genomstekta.","Rosta bröden lätt i ugn eller stekpanna.","Bygg ihop burgaren med sallad, skivade körsbärstomater och burgaren."],estimatedTotalCost:141.6},
-  {title:"Grekisk kebabtallrik med tunnbröd och tzatziki",description:"En riktig favorit när suget efter gatukök slår till hemma. Den varma, kryddiga gyrosen möter sval, syrlig tzatziki och mjukt tunnbröd - en kombination som aldrig blir fel. Gör gärna extra tzatziki, den brukar ta slut fort.",servings:4,dealIdsUsed:[761,1002,1008,1107,1108],ingredients:[{name:"Färdiggrillad gyros",amount:"1 kg",fromDealId:1008},{name:"Tunnbröd",amount:"4 st",fromDealId:1002},{name:"Turkisk yoghurt",amount:"1 förp",fromDealId:761},{name:"Gurka",amount:"1 st",fromDealId:1107},{name:"Bladpersilja",amount:"till tzatziki",fromDealId:1108}],steps:["Hetta upp gyrosen i en het stekpanna tills den är varm genomgående.","Riv gurkan grovt, blanda med yoghurt, hackad persilja, salt och lite pressad citron till tzatziki.","Värm tunnbröden hastigt och servera allt tillsammans."],estimatedTotalCost:164.8},
-  {title:"Fläskytterfilé med rostad potatis och örtsmör",description:"Ett omtyckt vardagsklassiker som känns lite finare utan att kräva mer arbete. Fläskytterfilén blir mör och saftig i ugnen, medan potatisen rostas i smör och får en gyllene, krispig yta. Den hackade persiljan lyfter hela rätten med lite fräschör på slutet.",servings:4,dealIdsUsed:[951,954,1096,1108],ingredients:[{name:"Färsk fläskytterfilé",amount:"1 kg",fromDealId:951},{name:"Färskpotatis",amount:"1 kg",fromDealId:1096},{name:"Smör",amount:"1 st",fromDealId:954},{name:"Bladpersilja",amount:"1 förp",fromDealId:1108}],steps:["Stek fläskytterfilén i smör tills fin yta, klart i ugn på 175°C ca 15 min (innertemp 65°C).","Koka potatisen mjuk, vänd i smält smör och hackad persilja.","Låt köttet vila 5 minuter innan uppskärning, servera med potatisen."],estimatedTotalCost:131.7},
-  {title:"Köttbullar med potatismos",description:"Barnens favorit sedan urminnes tider - köttbullar och krämigt potatismos är en kombination som funkar året runt. Enkel att laga, snabb att äta, och går utmärkt att frysa in i portioner för senare veckor.",servings:4,dealIdsUsed:[768,789,954],ingredients:[{name:"Köttbullar",amount:"1 förp",fromDealId:768},{name:"Kulpotatis",amount:"1 förp",fromDealId:789},{name:"Smör",amount:"till moset",fromDealId:954}],steps:["Stek köttbullarna genomstekta i en het panna.","Koka potatisen mjuk, mosa med smör, salt och lite mjölk.","Servera köttbullarna på moset, gärna med lingon och gurka."],estimatedTotalCost:101.9},
-  {title:"Ugnsbakad laxfilé med räkor och basmatiris",description:"En elegant men enkel fiskrätt som känns som helg även på en tisdag. Den ugnsbakade laxen blir saftig och mör, och de rosa räkorna ovanpå ger både färg och lyx. Servera med kokt basmatiris för en komplett och mättande måltid.",servings:4,dealIdsUsed:[721,726,781],ingredients:[{name:"Färsk laxfilé",amount:"1 kg",fromDealId:721},{name:"Räkor med skal",amount:"1 förp",fromDealId:726},{name:"Basmatiris",amount:"1 förp",fromDealId:781}],steps:["Ugnsbaka laxen på 200°C i ca 15 min tills den precis är genomstekt.","Koka riset enligt anvisning.","Servera laxen toppad med skalade räkor tillsammans med riset."],estimatedTotalCost:314.9},
-  {title:"Kyckling- och grönsakswok med äggnudlar",description:"Snabb, färgglad wok som är perfekt när du vill ha något gott utan att stå länge i köket. Kyckling och blomkål får fin stekyta i en het panna, och äggnudlarna suger upp alla smaker. Krydda gärna med lite soja eller chiliflakes på slutet.",servings:4,dealIdsUsed:[906,913,1020,1103],ingredients:[{name:"Fryst kryddad kyckling",amount:"1 förp",fromDealId:906},{name:"Äggnudlar",amount:"2 förp",fromDealId:913},{name:"Blomkål",amount:"400 g",fromDealId:1020},{name:"Röd paprika",amount:"1 st",fromDealId:1103}],steps:["Woka kycklingen i het panna eller wok tills den får fin färg.","Tillsätt blomkålsbuketter och skivad paprika, woka ytterligare 4-5 min.","Koka nudlarna enligt anvisning, blanda i woken och krydda med soja efter smak."],estimatedTotalCost:127.3},
-  {title:"Pasta med köttfärssås och parmesan",description:"Den ultimata comfort food-rätten - hemlagad köttfärssås som puttrat ihop sig med tomat, serverad över nykokt spaghetti och toppad med riven parmesan. Gör gärna dubbel sats, såsen blir bara godare dagen efter.",servings:4,dealIdsUsed:[705,777,1036,1087],ingredients:[{name:"Färsk blandfärs",amount:"1 förp",fromDealId:777},{name:"Passerade tomater",amount:"1 förp",fromDealId:705},{name:"Spaghetti",amount:"1 kg",fromDealId:1087},{name:"Parmigiano Reggiano",amount:"riven, efter smak",fromDealId:1036}],steps:["Bryn färsen väl i en kastrull.","Häll i passerade tomater, låt puttra 15-20 min, smaka av med salt, peppar och lite socker.","Koka spaghettin al dente, blanda med såsen och toppa med riven parmesan."],estimatedTotalCost:147.75},
-  {title:"Grillad picanha med chimichurri",description:"Argentinskt kött i sin bästa form - picanhan grillas till en perfekt stektemperatur och vilar sedan så att alla safter stannar kvar i köttet. Den friska, vitlöksdoftande chimichurrin är den självklara följeslagaren och ger en syrlig kontrast till det feta, smakrika köttet.",servings:4,dealIdsUsed:[1043,1108,1115],ingredients:[{name:"Picanha",amount:"1,4 kg",fromDealId:1115},{name:"Bladpersilja",amount:"1 förp",fromDealId:1108},{name:"Extra jungfruolivolja",amount:"till chimichurri",fromDealId:1043}],steps:["Krydda picanhan med grovt salt, grilla på hög värme till önskad innertemperatur, låt vila 10 min.","Finhacka persiljan, blanda med olivolja, vitlök, chiliflakes och lite vinäger till chimichurri.","Skiva köttet tunt mot fibrerna och servera med chimichurrin."],estimatedTotalCost:255.9},
-  {title:"Het fiskgryta med tilapia och räkor",description:"En värmande, lite kryddig fiskgryta som är klar på under 30 minuter men smakar som den fått puttra hela dagen. Tilapian blir mör i den syrliga tomatbasen, och räkorna tillsätts sist för att inte bli sega. Servera med jasminris som suger upp all sås.",servings:4,dealIdsUsed:[725,732,743,1070],ingredients:[{name:"Tilapia",amount:"1 kg",fromDealId:732},{name:"Tomatsås",amount:"720 ml",fromDealId:1070},{name:"Vannameiräkor",amount:"1 förp",fromDealId:743},{name:"Jasminris",amount:"1 förp",fromDealId:725}],steps:["Fräs valfria kryddor, häll i tomatsåsen och låt puttra 5 min.","Lägg i tärnad tilapia, sjud försiktigt 8-10 min tills fisken är genomstekt.","Rör ner räkorna sista 2 minuterna, servera med kokt jasminris."],estimatedTotalCost:202.8},
-  {title:"Kycklingbröstfilé med basmatiris och tomat",description:"Enkel och mättande vardagsmat som går snabbt att laga men känns genomtänkt. Den stekta kycklingfilén får sällskap av doftande basmatiris och färska tomater som ger lite syra till helheten. Ett säkert kort när tiden är knapp.",servings:4,dealIdsUsed:[753,780,781],ingredients:[{name:"Färsk kycklingbröstfilé",amount:"1 förp",fromDealId:780},{name:"Basmatiris",amount:"1 förp",fromDealId:781},{name:"Kvisttomater",amount:"400 g",fromDealId:753}],steps:["Stek kycklingfiléerna gyllenbruna och genomstekta, ca 6-7 min per sida.","Koka riset enligt anvisning.","Fräs tomaterna snabbt i samma panna och servera allt tillsammans."],estimatedTotalCost:224.95},
-  {title:"Vegetarisk blomkålscurry",description:"En värmande, vegetarisk currygryta som bevisar att grönsaker kan bära en hel måltid. Blomkål och paprika sjuder tillsammans med krossade tomater i en mjuk currysås, serverad över doftande basmatiris. Perfekt att göra extra av och värma upp dagen efter.",servings:4,dealIdsUsed:[781,1015,1020,1103],ingredients:[{name:"Blomkål",amount:"1 kg",fromDealId:1020},{name:"Röd paprika",amount:"1 st",fromDealId:1103},{name:"Kvisttomat",amount:"500 g",fromDealId:1015},{name:"Basmatiris",amount:"1 förp",fromDealId:781}],steps:["Fräs currykrydda kort i olja, tillsätt blomkålsbuketter och skivad paprika.","Häll i grovhackade tomater, låt puttra under lock tills blomkålen är mjuk, ca 15 min.","Servera med kokt basmatiris."],estimatedTotalCost:189.7},
-  {title:"Grillad lammstek med rostad potatis",description:"En festlig helgmiddag som imponerar utan att vara krånglig. Lammsteken kryddas rejält och får sjuda långsamt i ugnen tills den är mör som smör, medan den rostade potatisen ger en krispig kontrast. Låt köttet vila ordentligt innan det skärs upp - det gör stor skillnad.",servings:4,dealIdsUsed:[774,789,1108],ingredients:[{name:"Färsk lammstek med ben",amount:"1 kg",fromDealId:774},{name:"Kulpotatis",amount:"1 förp",fromDealId:789},{name:"Bladpersilja",amount:"till garnering",fromDealId:1108}],steps:["Krydda lammsteken med salt, peppar, vitlök och rosmarin, stek i ugn på 175°C till innertemp 60°C.","Rosta potatisen i ugn med olja och salt tills gyllene.","Låt köttet vila 10 minuter, skiva och toppa med hackad persilja."],estimatedTotalCost:167.8},
-  {title:"Helstekt kyckling med rotfrukter",description:"Söndagsmiddagen som aldrig går ur tiden. Hela kycklingen blir saftig och smakrik i ugnen, och doften som sprider sig i köket är svår att slå. Servera med enkelt kokt potatis och en frisk sallad för en balanserad, familjevänlig måltid.",servings:4,dealIdsUsed:[809,1096,1110],ingredients:[{name:"Hel kyckling",amount:"1 st",fromDealId:809},{name:"Färskpotatis",amount:"1 kg",fromDealId:1096},{name:"Isbergssallad",amount:"300 g",fromDealId:1110}],steps:["Krydda kycklingen invändigt och utvändigt, stek i ugn på 175°C ca 1 timme till innertemp 82°C i lårbenet.","Koka eller rosta potatisen samtidigt.","Servera med en enkel sallad vid sidan om."],estimatedTotalCost:47.8},
-  {title:"Grillad falukorv med potatismos och senap",description:"Nostalgisk husmanskost till ett riktigt bra pris. Den grillade falukorven och det krämiga potatismoset är en kombination som passar både vardag och fredagsmys. Ställ fram ketchup och senap så alla kan smaksätta efter eget tycke.",servings:4,dealIdsUsed:[302,1085,1096],ingredients:[{name:"Falukorv",amount:"1,5 kg",fromDealId:1085},{name:"Färskpotatis",amount:"1 kg",fromDealId:1096},{name:"Ketchup/senap",amount:"efter smak",fromDealId:302}],steps:["Snitta falukorven och grilla eller stek tills den fått fin yta.","Koka potatisen och mosa med smör, salt och lite mjölk.","Servera med ketchup och senap vid sidan om."],estimatedTotalCost:81.8},
-  {title:"Skagenmacka på surdegsbröd",description:"En snabb och elegant lunch eller mellanmål som är klar på fem minuter. Den krämiga skagenröran vilar på nybakat surdegsbröd och toppas med krispig gurka för lite crunch. Perfekt att ta med sig eller servera vid oanmälda gäster.",servings:4,dealIdsUsed:[1074,1093,1107],ingredients:[{name:"Skagenröra",amount:"1 förp",fromDealId:1093},{name:"Surdegsbröd/rustikt bröd",amount:"1 st",fromDealId:1074},{name:"Gurka",amount:"till garnering",fromDealId:1107}],steps:["Skiva surdegsbrödet och rosta lätt om så önskas.","Toppa varje skiva med rikligt med skagenröra.","Garnera med tunt skivad gurka och nymalen peppar."],estimatedTotalCost:52.8},
-  {title:"Grillspett med lammgrytbitar och paprika",description:"Sommarkänsla på pinne - lammgrytbitarna och paprikan grillas tillsammans tills köttet fått fin yta och paprikan mjuknat något. Ett enkelt men festligt sätt att grilla som passar utmärkt tillsammans med en sval gurksallad.",servings:4,dealIdsUsed:[1084,1103,1107],ingredients:[{name:"Lammgrytbitar",amount:"800 g",fromDealId:1084},{name:"Röd paprika",amount:"1 st",fromDealId:1103},{name:"Gurka",amount:"till tzatziki/sallad",fromDealId:1107}],steps:["Trä lammgrytbitar och paprikabitar växelvis på grillspett.","Grilla på medelhög värme ca 10-12 min, vänd regelbundet.","Servera med gurksallad vid sidan om."],estimatedTotalCost:136.8},
-  {title:"Färdig pizzakväll med chips och läsk",description:"Den enklaste fredagsmyskvällen som finns - grädda pizzan, häll upp chipsen och öppna läsken. Ibland är det bästa köket det som inte kräver någon matlagning alls, och den här kvällen är gjord för avslappning framför tv:n.",servings:4,dealIdsUsed:[901,1060,1094],ingredients:[{name:"Stenugnsbakad pizza",amount:"1 st",fromDealId:1060},{name:"Chips",amount:"1 påse",fromDealId:1094},{name:"Läsk",amount:"1,5L",fromDealId:901}],steps:["Grädda pizzan enligt anvisning på förpackningen.","Skär upp och servera med chips och kall läsk vid sidan om."],estimatedTotalCost:117.8},
-  {title:"Pastasallad med pesto, salami och mozzarella",description:"En smakrik pastasallad som är lika bra varm som kall, perfekt att ta med till jobbet eller ha som picknickmat. Pestons örtighet, salamins sälta och mozzarellans krämighet gör att varje tugga känns lite annorlunda. Håller sig fint i kylen ett par dagar.",servings:4,dealIdsUsed:[1041,1045,1066,1101],ingredients:[{name:"Pasta",amount:"500 g",fromDealId:1101},{name:"Pesto",amount:"1 st",fromDealId:1066},{name:"Salami caccoiatore",amount:"1 st, tärnad",fromDealId:1041},{name:"Buffelmozzarella",amount:"halva förpackningen",fromDealId:1045}],steps:["Koka pastan al dente, skölj kall och låt rinna av väl.","Blanda pastan med pesto, tärnad salami och mozzarellabitar.","Smaka av med salt, peppar och lite olivolja innan servering."],estimatedTotalCost:153.6},
-  {title:"Frukostbuffé med turkisk yoghurt och jordgubbar",description:"En rofylld frukost eller brunch som känns lite extra utan att kräva mycket förberedelse. Den täta, krämiga turkiska yoghurten möter söta, färska jordgubbar och knaprig müsli - en perfekt balans mellan syrligt, sött och krispigt.",servings:4,dealIdsUsed:[712,755,1001],ingredients:[{name:"Yoghurt i turkisk stil",amount:"1 kg",fromDealId:1001},{name:"Färska jordgubbar",amount:"1 liter",fromDealId:712},{name:"Müslimorgon",amount:"1 förp",fromDealId:755}],steps:["Skölj och skär jordgubbarna i halvor.","Fördela yoghurten i skålar.","Toppa med jordgubbar och müsli."],estimatedTotalCost:72.9},
-  {title:"Grillad entrecôte med smör och bakad potatis",description:"En riktig festmiddag för den som vill unna sig något extra. Den grillade entrecôten kryddas enkelt med salt och peppar för att låta köttets egen smak ta plats, och den smältande smörklicken på slutet gör hela rätten lyxig. Perfekt tillsammans med bakad potatis och ett glas rött.",servings:4,dealIdsUsed:[306,954,1096],ingredients:[{name:"Färsk entrecôte/biff",amount:"1 kg",fromDealId:306},{name:"Färskpotatis",amount:"1 kg",fromDealId:1096},{name:"Smör",amount:"till serveringen",fromDealId:954}],steps:["Krydda entrecôten med salt och peppar, grilla till önskad innertemperatur, låt vila 5-10 min.","Baka eller koka potatisen mjuk.","Servera med en klick smör som smälter över det varma köttet."],estimatedTotalCost:225.9},
-  {title:"Fisksoppa med lax och räkor",description:"En värmande fisksoppa som känns som en kram en kylig kväll. Laxen och räkorna sjuder försiktigt i en syrlig tomatbuljong tills de precis är klara - övertillagning är soppans värsta fiende. Servera med gott bröd att doppa i buljongen.",servings:4,dealIdsUsed:[705,740,742],ingredients:[{name:"Laxbitar",amount:"1 förp",fromDealId:740},{name:"Vannameiräkor",amount:"1 förp",fromDealId:742},{name:"Passerade tomater",amount:"1 förp",fromDealId:705}],steps:["Fräs valfri grönsaksbotten (lök, morot) i en kastrull.","Häll i passerade tomater och lite vatten eller buljong, låt puttra 10 min.","Lägg i laxbitarna, sjud 5 min, rör ner räkorna sista minuten."],estimatedTotalCost:139.9},
-  {title:"Grillad kalkonfilé med fräsch sallad",description:"Ett lättare alternativ till kyckling som ofta glöms bort men som förtjänar mer uppmärksamhet. Kalkonfiléen är mager och mild i smaken, vilket gör den perfekt tillsammans med en frisk sallad av körsbärstomater och krispig isbergssallad. Snabblagad vardagsmat som ändå känns genomtänkt.",servings:4,dealIdsUsed:[319,1109,1110],ingredients:[{name:"Kalkonfilé",amount:"1 st",fromDealId:319},{name:"Isbergssallad",amount:"300 g",fromDealId:1110},{name:"Körsbärstomater",amount:"1 förp",fromDealId:1109}],steps:["Krydda och stek eller grilla kalkonfiléen tills genomstekt, ca 6-8 min per sida.","Riv sallad och halvera körsbärstomaterna till en enkel sallad.","Skiva kalkonfiléen och servera ovanpå salladen."],estimatedTotalCost:115.8},
-  {title:"Fylld gnocchi med tomatsås och parmesan",description:"En krämig, tröstande italiensk rätt som är klar på under 15 minuter. De fyllda gnocchina är redan smakrika i sig, och den varma tomatsåsen tillsammans med riven parmesan gör helheten både enkel och elegant. Perfekt när du vill ha något gott utan att lägga ner mycket tid.",servings:4,dealIdsUsed:[1036,1063,1070],ingredients:[{name:"Fylld gnocchi",amount:"500 g",fromDealId:1063},{name:"Tomatsås",amount:"720 ml",fromDealId:1070},{name:"Parmigiano Reggiano",amount:"riven, efter smak",fromDealId:1036}],steps:["Koka gnocchin enligt anvisning tills de flyter upp.","Värm tomatsåsen i en panna, vänd ner den kokta gnocchin försiktigt.","Toppa med riven parmesan innan servering."],estimatedTotalCost:115.7},
-  {title:"BBQ-kycklingsteak med basmatiris och tomat",description:"Sommargrillat med amerikansk twist - den söta, rökiga BBQ-smaken på kycklingsteaken kompletteras fint av det milda basmatiriset och de friska tomaterna. En snabb och mättande rätt som passar lika bra på vardagen som till helgens grillkväll.",servings:4,dealIdsUsed:[753,771,781],ingredients:[{name:"Färsk kycklingsteak BBQ",amount:"4 st",fromDealId:771},{name:"Basmatiris",amount:"1 förp",fromDealId:781},{name:"Kvisttomater",amount:"400 g",fromDealId:753}],steps:["Grilla eller stek kycklingsteakarna enligt förpackningen tills genomstekta.","Koka riset enligt anvisning.","Servera tillsammans med skivade tomater."],estimatedTotalCost:194.95},
-];
-
-
-// ── Supabase-sync ─────────────────────────────────────────
-async function loadShoppingList(){
-  if (Date.now() - lastLocalWrite < 3500) return;
-  if(!session || !household){ if(shoppingList.length){ shoppingList=[]; render(); } return; }
+let RECIPES = [], recipesLoadedForCity = null, recipeCat = 'alla';
+let recipeBudget = localStorage.getItem('vf_recipe_budget') || '';
+const RECIPE_CAT_LABELS = {protein:'💪 Proteinrikt', healthy:'🥗 Hälsosamt', family:'👨‍👩‍👧 Familj', vegetarian:'🌱 Vegetariskt'};
+async function loadRecipes(){
+  if(recipesLoadedForCity === currentCityId) return;
   try{
-    const data = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}`);
-    if(!Array.isArray(data)) return;
-    const hash = JSON.stringify(data.map(r=>[r.id,r.checked,r.qty]).sort());
-    if(hash===lastDataHash) return;
-    lastDataHash = hash;
-    shoppingList = data.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail, price:r.price, origPrice:r.orig_price, unit:r.unit, category:r.category, emoji:r.emoji, checked:r.checked, qty:r.qty||1, isCustom:r.is_custom||false }));
-    render();
-  }catch(e){ /* offline/förhandsvisning – synkar live */ }
+    const rows = await supa.selectRaw(`recipes?select=*&city_id=eq.${currentCityId}&order=category.asc`);
+    RECIPES = Array.isArray(rows) ? rows.map(r=>({
+      id:r.id, category:r.category, title:r.title, description:r.description, servings:r.servings,
+      steps:r.steps||[], ingredients:r.ingredients||[], estimatedTotalCost:r.estimated_total_cost, matchScore:r.match_score
+    })) : [];
+    recipesLoadedForCity = currentCityId;
+  }catch(e){ RECIPES = []; }
+  render();
 }
-function inList(id){ return shoppingList.some(i=>i.id===id); }
-async function addOffer(id){
-  if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
-  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
-  const o = deals.find(d=>d.id===id); if(!o) return;
-  if(inList(id)){ showToast('Redan på listan'); return; }
-  const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
-  shoppingList.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
-  try{ await supa.insert('shopping_list', { id:item.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
-}
-async function toggleItem(id){
-  const it = shoppingList.find(i=>i.id===id); if(!it) return;
-  it.checked = !it.checked; markWrite(); render();
-  try{ await supa.update('shopping_list', id, { checked: it.checked }); }catch(e){ /* tyst */ }
-}
-async function removeItem(id){
-  shoppingList = shoppingList.filter(i=>i.id!==id); markWrite(); render();
-  try{ await supa.delete('shopping_list', id); }catch(e){ /* tyst */ }
-}
-async function submitCustom(){
-  if(!session){ showToast('🔐 Logga in för att lägga till på listan'); sheet=null; tab='lista'; render(); return; }
-  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); sheet=null; tab='lista'; render(); return; }
-  const name=(document.getElementById('f_name')||{}).value||'';
-  if(!name.trim()) return;
-  const store=(document.getElementById('f_store')||{}).value||'ovrigt';
-  const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
-  const qty=Math.max(1, parseInt((document.getElementById('f_qty')||{}).value||'1')||1);
-  const id = Date.now();
-  const item = { id, store, product:name.trim(), detail:'', price:0, origPrice:0, unit:'', category:c, emoji:CAT_EMOJI[c]||'🛒', checked:false, qty, isCustom:true };
-  shoppingList.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
-  try{ await supa.insert('shopping_list', { id, household_id:household.id, added_by:session.user.id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
-}
-async function submitOffer(){
-  const name=(document.getElementById('f_name')||{}).value||'';
-  const saleV=(document.getElementById('f_sale')||{}).value||'';
-  if(!name.trim()||!saleV) return;
-  const store=(document.getElementById('f_store')||{}).value||'';
-  const details=(document.getElementById('f_details')||{}).value||'';
-  const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
-  const sale=Number(saleV); const ord=Number((document.getElementById('f_ord')||{}).value)||sale;
-  const id = Date.now();
-  const manualDeal = { id, store:store||'ovrigt', product:name.trim(), detail:details||'Eget tillägg', price:sale, origPrice:ord, unit:'st', category:c, emoji:CAT_EMOJI[c]||'🛒', hot:false };
-  ALL_DEALS.unshift(manualDeal); deals.unshift(manualDeal);
-  sheet=null; tab='erbjudanden'; cat='Alla'; render();
-}
-
-// ── Render ────────────────────────────────────────────────
-const FAM="'Hanken Grotesk',sans-serif", DISP="'Bricolage Grotesque',sans-serif";
-const PAGE='max-width:1080px;margin:0 auto;padding:clamp(16px,4vw,28px);';
-
-function navBtn(key,label){
-  const active = tab===key;
-  const badge = key==='lista'&&shoppingList.length ? ' · '+shoppingList.length : '';
-  return `<button onclick="go('${key}')" style="flex:1;padding:10px 8px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
-}
-function areaSwitcher(){
-  const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
-  if(CITIES.length < 2 && areasInCity.length < 2) return '';
-  const cityOpts = CITIES.map(c=>`<option value="${c.id}" ${c.id===currentCityId?'selected':''}>${esc(c.name)}</option>`).join('');
-  const areaOpts = areasInCity.map(a=>`<option value="${a.id}" ${a.id===currentAreaId?'selected':''}>${esc(a.name)}</option>`).join('');
-  const selStyle = `height:42px;max-width:104px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:13px;font-weight:700;font-family:${FAM};color:#2A211A;cursor:pointer;padding:0 8px;`;
-  return `<div style="display:flex;gap:6px;">
-    ${CITIES.length>1?`<select onchange="switchCity(this.value)" style="${selStyle}" title="Byt stad">${cityOpts}</select>`:''}
-    ${areasInCity.length>1?`<select onchange="switchArea(this.value)" style="${selStyle}" title="Byt område">${areaOpts}</select>`:''}
-  </div>`;
-}
-function header(){
-  const wi = getWeekInfo();
-  return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
-    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;">
-      <div style="width:42px;height:42px;flex:none;border-radius:14px;background:#E0552E;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(224,85,46,.32);">
-        <svg width="26" height="26" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VeckoFynd">
-          <g transform="rotate(45 54 60)">
-            <path d="M30 36 L78 36 Q90 36 90 48 L90 72 Q90 84 78 84 L42 84 Q30 84 30 72 Z" fill="#FBF6EE"></path>
-            <circle cx="45" cy="51" r="7" fill="#E0552E"></circle>
-          </g>
-          <path d="M54 20 C54 12 49 6 41 5 C41 13 46 19 54 20 Z" fill="#FBF6EE"></path>
-          <path d="M54 20 C54 13 58 8 65 7 C65 14 61 19 54 20 Z" fill="#FBF6EE" opacity="0.72"></path>
-          <rect x="52.4" y="19" width="3.2" height="12" rx="1.6" fill="#FBF6EE"></rect>
-        </svg>
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
-      </div>
-      ${areaSwitcher()}
-      <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
-    </div>
-    <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
-    </nav>
-  </header>`;
-}
-function detectMember(o){
-  const d = (o.detail||'').toLowerCase(), p = (o.product||'').toLowerCase();
-  if(/med lidl plus|lidl plus kupong|lidl\+/i.test(d+p)) return {label:'Kräver Lidl Plus',color:'#1A4F8A',bg:'#DEEAF8'};
-  if(/stammis|ica stammis/i.test(d+p))                    return {label:'Kräver ICA Stammis',color:'#B80000',bg:'#FADEDE'};
-  if(/matv.rlden vip|vip-pris/i.test(d+p))                return {label:'Kräver Matvärlden VIP',color:'#5A2D8A',bg:'#EDE3F8'};
-  if(/hemköp plus|hemkop plus/i.test(d+p))                return {label:'Kräver Hemköp Plus',color:'#8A1A5A',bg:'#F8DEEE'};
-  if(/coop members/i.test(d+p))                           return {label:'Kräver Coop Membership',color:'#005B8E',bg:'#D8EEF8'};
-  if(/willys plus|willys\+/i.test(d+p))                  return {label:'Kräver Willys Plus',color:'#8A1A1A',bg:'#F8DEDE'};
-  if(o.member)                                             return {label:'Kräver medlemskap',color:'#4A4A4A',bg:'#EBEBEB'};
-  return null;
-}
-function offerCard(o){
-  const st = storeById(o.store);
-  const save = (o.origPrice||0) - o.price;
-  const hasDisc = save > 0.001;
-  const pct = hasDisc && o.origPrice ? Math.round(save/o.origPrice*100) : 0;
-  const added = inList(o.id);
-  const bg = CAT_BG[o.category] || '#EFE7DA';
-  const member = detectMember(o);
-  const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
-  let details = o.detail||'';
-  if(o.validTo){
-    const WD=['sön','mån','tis','ons','tor','fre','lör'];
-    const vt=new Date(o.validTo+'T00:00:00'); const today=new Date(); today.setHours(0,0,0,0);
-    const daysLeft=Math.round((vt-today)/86400000);
-    if(daysLeft<=2){ details=(details?details+' · ':'')+(daysLeft<=0?'⏰ Sista dagen idag':`⏰ Gäller t.o.m. ${WD[vt.getDay()]}`); }
-  }
-  const priceRow = `<div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
-      <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>
-      ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}${unitSuffix(o.unit)}</span>
-      <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}${unitSuffix(o.unit)}</span>`:''}
-    </div>`;
-  const badge = hasDisc?`<div style="background:#FBEAE2;color:#C2431F;font-weight:800;font-size:13px;padding:5px 9px;border-radius:10px;flex:none;font-family:${DISP};">-${pct}%</div>`:'';
-  const addStyle = added
-    ? `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
-    : `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
-  return `<div style="background:#fff;border:1px solid ${member?member.color+'44':'#EFE6D8'};border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
-    <div style="display:flex;align-items:flex-start;gap:12px;">
-      <div style="width:54px;height:54px;border-radius:16px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:28px;flex:none;">${o.emoji||'🛒'}</div>
-      <div style="flex:1;min-width:0;">
-        <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">${storeLogo(st,16,5)}${esc(st.name)}</span>
-        <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:5px;">${esc(o.product)}</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
-        ${memberBadge}
-      </div>
-      ${badge}
-    </div>
-    ${priceRow}
-    <button ${added?'':`onclick="addOffer(${o.id})"`} style="${addStyle}">${added?'✓ Tillagd på listan':'+ Lägg till på lista'}</button>
-  </div>`;
-}
-function viewOffers(){
-  if(catalogLoading) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">Hämtar veckans erbjudanden…</div>`;
-  if(catalogError) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">${esc(catalogError)}</div>`;
-  const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
-  const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
-  const chipDefs = ['Alla'].concat(present);
-  const chips = chipDefs.map(c=>{ const a=cat===c;
-    return `<button onclick="setCat('${c.replace(/'/g,"\\'")}')" style="padding:9px 15px;border-radius:12px;border:${a?'none':'1px solid #EFE6D8'};background:${a?'#E0552E':'#fff'};color:${a?'#fff':'#6A5E50'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;font-family:${FAM};flex:none;">${esc(c)}</button>`; }).join('');
-  const visible = cat==='Alla'? deals : deals.filter(o=>o.category===cat);
-  const grid = visible.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga erbjudanden i denna kategori.</div>`;
-  return `<div style="background:linear-gradient(135deg,#E0552E,#C2431F);border-radius:22px;padding:20px 22px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 12px 28px rgba(224,85,46,.26);margin-bottom:18px;">
-      <div style="flex:1;">
-        <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
-        <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
-        <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden ${followedStoreIds.size?`från ${followedStoreIds.size} valda butiker`:`i ${esc(currentAreaName)}`}</div>
-      </div>
-      <div style="font-size:48px;line-height:1;">🥕</div>
-    </div>
-    <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>`;
-}
-function storeCard(st, count, save, top, followed){
-  return `<div style="background:#fff;border:1px solid ${followed?'#E0552E':'#EFE6D8'};border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
-      <div style="display:flex;align-items:center;gap:12px;">
-        ${storeLogo(st,46,14)}
-        <div style="flex:1;min-width:0;">
-          <div style="font-family:${DISP};font-weight:700;font-size:16px;">${esc(st.name)}</div>
-          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(st.address||st.distance||'')}</div>
-        </div>
-        <div style="text-align:right;flex:none;">
-          <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count}</div>
-          <div style="font-size:10.5px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.04em;">fynd</div>
-        </div>
-      </div>
-      ${count?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #E6DBC9;display:flex;flex-direction:column;gap:9px;">${top}</div>`:''}
-      ${save>0?`<div style="margin-top:14px;background:#EAF1E3;color:#3E6632;font-weight:700;font-size:13px;border-radius:12px;padding:10px 12px;text-align:center;">Spara upp till ${kr(save)}</div>`:''}
-      <button onclick="toggleFollow('${st.id}')" style="margin-top:14px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:13.5px;font-family:${FAM};border:1px solid ${followed?'#E0552E':'#E3D8C6'};background:${followed?'#FBEAE2':'#fff'};color:${followed?'#C2431F':'#6A5E50'};cursor:pointer;">${followed?'✓ Följer den här butiken':'+ Följ den här butiken'}</button>
-    </div>`;
-}
-function storeCardData(st){
-  const items = ALL_DEALS.filter(o=>o.store===st.id);
-  const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
-  const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
-    .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
-  return { st, count:items.length, save, top };
-}
-function viewStores(){
-  const byArea = {};
-  ALL_STORES.forEach(st=>{
-    const key = st.areaId || '_';
-    (byArea[key] = byArea[key] || []).push(st);
-  });
-  const areaIds = Object.keys(byArea).filter(areaId=>{
-    const a = AREAS.find(x=>x.id===areaId);
-    const inCurrentCity = a ? a.city_id===currentCityId : false;
-    const hasFollowed = byArea[areaId].some(st=>followedStoreIds.has(st.id));
-    return inCurrentCity || hasFollowed;
-  }).sort((a,b)=>(a===currentAreaId?-1:b===currentAreaId?1:0));
-  const sections = areaIds.map(areaId=>{
-    const areaRow = AREAS.find(a=>a.id===areaId) || {};
-    const areaName = areaRow.name || 'Övrigt';
-    const cityLabel = areaRow.city_id && areaRow.city_id!==currentCityId ? ` · ${esc((CITIES.find(c=>c.id===areaRow.city_id)||{}).name||'')}` : '';
-    const cards = byArea[areaId].map(storeCardData).sort((a,b)=>b.count-a.count)
-      .map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
-    return `<div style="margin:22px 0 10px;font-weight:800;font-family:${DISP};font-size:14px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">📍 ${esc(areaName)}${cityLabel}</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
-  }).join('');
-  const heading = followedStoreIds.size ? `Butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
-  const sub = 'Klicka på en butik eller en nål på kartan för att följa den, oavsett område';
-  return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
-    <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
-    ${followedStoreIds.size?`<button onclick="clearFollowed()" style="margin-bottom:16px;padding:10px 16px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Rensa valda butiker</button>`:''}
-    ${sections || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}`;
-}
-function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); recomputeScope(); render(); }
-function renderStoreMap(){
-  const el = document.getElementById('vf-map');
-  if(!el || typeof L === 'undefined' || !ALL_STORES.length) return;
-  if(vfMap){ try{ vfMap.remove(); }catch(e){} vfMap = null; }
-  vfMap = L.map('vf-map', {scrollWheelZoom:false});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
-  vfMapMarkers = {};
-  const pts = [];
-  const mapStores = ALL_STORES.filter(st=>{
-    const a = AREAS.find(x=>x.id===st.areaId);
-    return (a && a.city_id===currentCityId) || followedStoreIds.has(st.id);
-  });
-  mapStores.forEach(st=>{
-    if(st.lat==null || st.lng==null) return;
-    pts.push([st.lat, st.lng]);
-    const followed = followedStoreIds.has(st.id);
-    const icon = L.divIcon({className:'', html:`<div class="vf-pin" style="background:${followed?'#E0552E':st.color};"><span>${followed?'✓':(st.logo||'🛒')}</span></div>`, iconSize:[30,30], iconAnchor:[15,30]});
-    const marker = L.marker([st.lat, st.lng], {icon}).addTo(vfMap);
-    marker.bindPopup(`<b>${esc(st.name)}</b><br>${followed?'Följs — klicka för att sluta följa':'Klicka på nålen för att följa'}`);
-    marker.on('click', ()=>toggleFollow(st.id));
-    vfMapMarkers[st.id] = marker;
-  });
-  if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
-  setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
-}
-function loginGate(){
-  return `<div style="text-align:center;padding:40px 20px;">
-    <div style="font-size:48px;">🔐</div>
-    <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Logga in för att se listan</div>
-    <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:320px;margin-left:auto;margin-right:auto;">Inköpslistan delas inom ditt hushåll (upp till 5 mailadresser). Ange din mail så skickar vi en inloggningslänk.</div>
-    ${authEmailSent ? `<div style="margin-top:20px;background:#EAF1E3;color:#3E6632;padding:14px;border-radius:14px;font-weight:700;font-size:14px;max-width:320px;margin-left:auto;margin-right:auto;">✓ Länk skickad! Kolla din mail och klicka på länken.</div>` :
-    `<div style="margin-top:20px;display:flex;gap:8px;max-width:340px;margin-left:auto;margin-right:auto;">
-      <input id="auth_email" type="email" placeholder="din@mail.se" style="flex:1;padding:12px;border-radius:12px;border:1px solid #E3D8C6;font-size:15px;font-family:${FAM};outline:none;">
-      <button onclick="sendLoginLink()" style="padding:12px 18px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-family:${FAM};cursor:pointer;">Skicka länk</button>
-    </div>`}
-  </div>`;
-}
-function householdPanel(){
-  if(!session) return '';
-  const myId = session.user.id;
-  const isOwner = householdMembers.some(m=>m.user_id===myId && m.is_owner);
-  const total = householdMembers.length + householdInvites.length;
-  const memberRows = householdMembers.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
-      <span style="font-size:13.5px;">${esc(m.email)}${m.is_owner?' 👑':''}${m.user_id===myId?' (du)':''}</span>
-      ${(isOwner && m.user_id!==myId) ? `<button onclick="removeFamilyMember('${m.user_id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Ta bort</button>` : ''}
-    </div>`).join('');
-  const inviteRows = householdInvites.map(i=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
-      <span style="font-size:13.5px;color:#8A7E6E;">${esc(i.email)} · väntar</span>
-      ${isOwner ? `<button onclick="cancelInvite('${i.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Avbryt</button>` : ''}
-    </div>`).join('');
-  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <span style="font-weight:800;font-family:${DISP};font-size:15px;">👨‍👩‍👧‍👦 Ditt hushåll (${total}/5)</span>
-      <button onclick="signOut()" style="border:none;background:none;color:#8A7E6E;font-size:12px;cursor:pointer;text-decoration:underline;">Logga ut</button>
-    </div>
-    ${memberRows}${inviteRows}
-    ${isOwner && total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
-      <input id="invite_email" type="email" placeholder="familjemedlems mail" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
-      <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
-    </div>` : (total>=5 ? `<div style="margin-top:8px;font-size:12px;color:#8A7E6E;">Hushållet är fullt (max 5).</div>` : '')}
-  </div>`;
-}
-function viewList(){
-  if(!session) return loginGate();
-  if(!household){
-    return `<div style="text-align:center;padding:40px 20px;">
-      <div style="font-size:48px;">⚠️</div>
-      <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Kunde inte ladda ditt hushåll</div>
-      <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Du är inloggad som ${esc(session.user.email||'')}, men något gick fel när listan skulle hämtas.</div>
-      <button onclick="loadAuthAndHousehold()" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Försök igen</button>
-    </div>`;
-  }
-  // ── Sökruta ───────────────────────────────────────────────
-  const searchBox = `<div style="margin-bottom:18px;">
-    <div style="background:linear-gradient(135deg,#2A211A,#4A3728);border-radius:20px;padding:18px 20px;color:#fff;margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;opacity:.85;margin-bottom:10px;">🔍 Sök efter fynd på din lista</div>
-      <div style="font-size:12.5px;opacity:.75;margin-bottom:12px;line-height:1.5;">Skriv en eller flera varor (kommaseparerade) så hittar vi veckans erbjudanden åt dig.</div>
-      <textarea id="deal_search" placeholder="t.ex. kyckling, pasta, ost, tomat…" rows="2" style="width:100%;padding:11px 14px;border-radius:12px;border:none;font-size:14px;font-family:${FAM};color:#2A211A;resize:none;box-sizing:border-box;outline:none;">${esc(searchInput)}</textarea>
-      <button onclick="searchDeals()" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:800;font-size:14px;font-family:${FAM};cursor:pointer;">Hitta fynd</button>
-    </div>
-    ${searchDone && searchResults ? renderSearchResults() : ''}
-  </div>`;
-  const hh = householdPanel();
-
-  if(!shoppingList.length){
-    return hh + searchBox + `<div style="text-align:center;padding:40px 20px;">
-      <div style="font-size:54px;">🧺</div>
-      <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Listan är tom</div>
-      <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Lägg till fynd härifrån eller bläddra bland erbjudandena.</div>
-      <button onclick="go('erbjudanden')" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bläddra bland fynd</button>
-    </div>`;
-  }
-  const totalPrice = shoppingList.reduce((a,i)=>a+(i.isCustom?0:i.price*i.qty),0);
-  const totalSaved = shoppingList.reduce((a,i)=>a+(i.isCustom?0:Math.max(0,(i.origPrice||0)-i.price)*i.qty),0);
-  const order=[], gmap={};
-  shoppingList.forEach(i=>{ if(!gmap[i.store]){ const st=storeById(i.store); gmap[i.store]={name:st.name,color:st.color,logoUrl:st.logoUrl,items:[]}; order.push(i.store);} gmap[i.store].items.push(i); });
-  const groups = order.map(k=>{ const g=gmap[k];
-    const rows = g.items.map(i=>{
-      const lineSave=Math.max(0,(i.origPrice||0)-i.price)*i.qty;
-      const meta=(i.qty>1?i.qty+' st · ':'')+(i.isCustom?'egen vara':((i.origPrice>i.price)?('ord. '+kr(i.origPrice)+' · spar '+kr(lineSave)):(i.detail||i.unit||'')));
-      const priceStr=i.isCustom?'—':kr(i.price*i.qty);
-      const checkStyle=`width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;font-weight:800;color:#fff;background:${i.checked?'#4F7A3F':'#fff'};border:${i.checked?'1px solid #4F7A3F':'2px solid #E0D5C2'};`;
-      const nameStyle=`font-weight:700;font-size:14.5px;color:${i.checked?'#B6A893':'#2A211A'};text-decoration:${i.checked?'line-through':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
-      return `<div style="display:flex;align-items:center;gap:12px;padding:11px 12px;">
-        <button onclick="toggleItem(${i.id})" style="${checkStyle}">${i.checked?'✓':''}</button>
-        <div style="flex:1;min-width:0;"><div style="${nameStyle}">${esc(i.product)}</div><div style="font-size:12px;color:#8A7E6E;margin-top:1px;">${esc(meta)}</div></div>
-        <span style="font-weight:800;font-size:14px;font-family:${DISP};color:#2A211A;">${priceStr}</span>
-        <button onclick="removeItem(${i.id})" style="width:28px;height:28px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:13px;cursor:pointer;flex:none;">✕</button>
-      </div>`;
-    }).join('');
-    return `<div style="margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">${storeLogo(g,20,6)}<span style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#8A7E6E;">${esc(g.name)}</span></div>
-      <div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>
-    </div>`;
-  }).join('');
-  return hh + searchBox + `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
-      <div style="flex:1;"><div style="font-size:12.5px;opacity:.65;">${shoppingList.length} varor att handla</div><div style="font-family:${DISP};font-weight:800;font-size:32px;line-height:1;margin-top:4px;">${kr(totalPrice)}</div></div>
-      <div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Du sparar</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#9FD27E;margin-top:3px;">-${kr(totalSaved)}</div></div>
-    </div>${groups}`;
-}
-function renderSearchResults(){
-  if(!searchResults || !searchResults.length) return '';
-  const found = searchResults.filter(r=>r.hits.length>0);
-  const notFound = searchResults.filter(r=>r.hits.length===0);
-
-  // Bygg en butikskarta: vilken butik täcker flest söktermer?
-  const storeScore = {};
-  found.forEach(r => {
-    const best = r.hits[0]; // bäst rabatt för denna term
-    storeScore[best.store] = (storeScore[best.store]||0) + 1;
-  });
-  const bestStore = Object.entries(storeScore).sort((a,b)=>b[1]-a[1])[0];
-
-  const foundRows = found.map(r => {
-    const best = r.hits[0];
-    const st = storeById(best.store);
-    const disc = best.origPrice > best.price ? `<span style="color:#E0552E;font-weight:800;font-size:11px;margin-left:6px;">-${Math.round((1-best.price/best.origPrice)*100)}%</span>` : '';
-    const already = inList(best.id);
-    const btn = already
-      ? `<span style="font-size:11px;color:#4F7A3F;font-weight:700;">✓ Tillagd</span>`
-      : `<button onclick="addSearchHit(${best.id})" style="padding:5px 12px;border:none;border-radius:9px;background:#2A211A;color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">+ Lägg till</button>`;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F3ECDF;">
-      <span style="font-size:20px;">${best.emoji||'🛒'}</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:13.5px;">${esc(best.product)}${disc}</div>
-        <div style="font-size:11.5px;color:#8A7E6E;margin-top:1px;">${esc(st.name)} · ${kr(best.price)}${unitSuffix(best.unit)}</div>
-      </div>
-      ${btn}
-    </div>`;
-  }).join('');
-
-  const notFoundRows = notFound.length ? `<div style="padding:10px 14px;font-size:12.5px;color:#B6A893;">
-    Inga fynd: ${notFound.map(r=>`<b>${esc(r.term)}</b>`).join(', ')}
-  </div>` : '';
-
-  const tipRow = bestStore && storeScore[bestStore[0]] > 1
-    ? `<div style="margin-top:10px;background:#EAF1E3;border-radius:12px;padding:10px 14px;font-size:12.5px;color:#3E6632;font-weight:700;">
-        💡 ${esc(storeById(bestStore[0]).name)} täcker ${bestStore[1]} av dina sökta varor
-      </div>` : '';
-
-  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;overflow:hidden;margin-bottom:4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
-    <div style="padding:12px 14px 8px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#8A7E6E;">
-      ${found.length} fynd hittade • ${notFound.length} saknas denna vecka
-    </div>
-    ${foundRows}${notFoundRows}
-  </div>${tipRow}`;
-}
-function toggleDesc(uid){
-  const el = document.getElementById('desc_'+uid);
-  const btn = document.getElementById('descbtn_'+uid);
-  if(!el||!btn) return;
-  const expanded = el.dataset.expanded === '1';
-  if(expanded){
-    el.style.webkitLineClamp = '2';
-    el.style.overflow = 'hidden';
-    el.dataset.expanded = '0';
-    btn.textContent = 'Läs mer…';
-  } else {
-    el.style.webkitLineClamp = 'unset';
-    el.style.overflow = 'visible';
-    el.dataset.expanded = '1';
-    btn.textContent = 'Visa mindre';
-  }
-}
+function setRecipeCat(c){ recipeCat = c; render(); }
+function setRecipeBudget(v){ recipeBudget = v; localStorage.setItem('vf_recipe_budget', v); render(); }
 let recipeCardSeq = 0;
 function recipeCard(r){
   const uid = 'r' + (recipeCardSeq++);
@@ -723,13 +293,10 @@ function recipeCard(r){
       <span id="desc_${uid}" data-expanded="0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;color:#5A4F43;line-height:1.5;">${esc(r.description)}</span>
       <span id="descbtn_${uid}" onclick="toggleDesc('${uid}')" style="display:inline-block;margin-top:4px;color:#4F7A3F;font-weight:700;cursor:pointer;font-size:12.5px;">Läs mer…</span>
     </div>` : '';
-  let matchCount = 0;
+  const matchCount = (r.ingredients||[]).filter(i=>i.fromDealId).length;
   const ingRows = (r.ingredients||[]).map(ing=>{
-    const n = normalize(ing.name||'');
-    const d = n ? deals.find(x=>{ const dp=normalize(x.product); return dp && (dp.includes(n)||n.includes(dp)); }) : null;
-    if(d) matchCount++;
-    const tag = d ? `<span style="margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:3px 8px;border-radius:8px;">${esc(storeById(d.store).name)} · ${kr(d.price)}${unitSuffix(d.unit)}</span>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(ing.amount||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
+    const tag = ing.fromDealId!=null ? `<span style="margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:3px 8px;border-radius:8px;">${esc(storeById(ing.store).name)} · ${kr(ing.price)}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(ing.amount||'')} ${esc(ing.unit||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
   }).join('');
   const steps = (r.steps||[]).map((s,i)=>`<div style="display:flex;gap:10px;padding:6px 0;font-size:13.5px;line-height:1.5;"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#F0E8DA;color:#6A5E50;font-weight:800;font-size:11.5px;display:flex;align-items:center;justify-content:center;">${i+1}</span><span>${esc(s)}</span></div>`).join('');
   return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
@@ -743,44 +310,33 @@ function recipeCard(r){
     <div>${steps}</div>
   </div>`;
 }
-async function generateRecipes(){
-  const val = document.getElementById('recipe_q');
-  recipeQuery = val ? val.value : recipeQuery;
-  recipeLoading = true; recipeError = null; recipeResult = null;
-  render();
-  try{
-    const res = await fetch(`${SUPA_URL}/functions/v1/generate-recipe`, {
-      method:'POST', headers: await authHeaders(),
-      body: JSON.stringify({ deals: deals, request: recipeQuery })
-    });
-    const data = await res.json();
-    if(!res.ok || data.error){ recipeError = data.error || 'Något gick fel, försök igen.'; }
-    else { recipeResult = data; }
-  }catch(e){ recipeError = 'Kunde inte nå AI-tjänsten. Kontrollera anslutningen.'; }
-  recipeLoading = false;
-  render();
-}
 function viewRecipes(){
-  const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:18px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
-      <div style="font-size:13px;opacity:.92;font-weight:600;">🍳 ${PRESET_RECIPES.length} recept från veckans fynd</div>
-      <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">Här är ${PRESET_RECIPES.length} recept byggda på veckans erbjudanden. Vill du ha något specifikt? Skriv en önskan nedan så bygger AI:n ett skräddarsytt recept åt dig.</div>
+  if(recipesLoadedForCity !== currentCityId) loadRecipes();
+  const budgetNum = parseFloat((recipeBudget||'').replace(',','.'));
+  const hasBudget = !isNaN(budgetNum) && budgetNum > 0;
+  let list = RECIPES;
+  if(recipeCat !== 'alla') list = list.filter(r=>r.category===recipeCat);
+  if(hasBudget) list = list.filter(r=>r.estimatedTotalCost==null || r.estimatedTotalCost<=budgetNum);
+  const tabs = ['alla','protein','healthy','family','vegetarian'].map(c=>{
+    const active = recipeCat===c;
+    const label = c==='alla' ? 'Alla' : RECIPE_CAT_LABELS[c];
+    const count = c==='alla' ? RECIPES.length : RECIPES.filter(r=>r.category===c).length;
+    return `<button onclick="setRecipeCat('${c}')" style="flex:none;padding:9px 14px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label} (${count})</button>`;
+  }).join('');
+  const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
+      <div style="font-size:13px;opacity:.92;font-weight:600;">🍳 ${RECIPES.length} recept från veckans erbjudanden i ${esc(currentCityName)}</div>
+      <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">40 recept i 4 kategorier genereras automatiskt varje måndag utifrån det som faktiskt är på extrapris just den här veckan — inte alla mallar hittar en match varje vecka.</div>
     </div>`;
-  const inputRow = `<div style="display:flex;gap:10px;margin-bottom:22px;">
-      <input id="recipe_q" value="${esc(recipeQuery)}" placeholder="t.ex. 4 personer, snabb vardagsmat…" style="${inputStyle()}" ${recipeLoading?'disabled':''}>
-      <button onclick="generateRecipes()" ${recipeLoading?'disabled':''} style="flex:none;padding:0 20px;border:none;border-radius:12px;background:${recipeLoading?'#B6A893':'#4F7A3F'};color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:${recipeLoading?'default':'pointer'};">${recipeLoading?'Skapar…':'Skapa eget'}</button>
+  const budgetRow = `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;">
+      <input id="recipe_budget" type="number" inputmode="decimal" value="${esc(recipeBudget)}" oninput="setRecipeBudget(this.value)" placeholder="Budget i kr för hela receptet (valfritt)" style="${inputStyle()}">
+      ${hasBudget?`<button onclick="setRecipeBudget('')" style="flex:none;padding:0 14px;height:44px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};">Rensa</button>`:''}
     </div>`;
-  let aiBody = '';
-  if(recipeLoading){
-    aiBody = `<div style="text-align:center;padding:40px 0;color:#8A7E6E;font-size:14px;">🍳 AI:n läser igenom ${deals.length} erbjudanden och bygger recept…</div>`;
-  } else if(recipeError){
-    aiBody = `<div style="background:#FBEAE2;color:#C2431F;border-radius:16px;padding:16px;font-size:14px;margin-bottom:18px;">⚠️ ${esc(recipeError)}</div>`;
-  } else if(recipeResult && Array.isArray(recipeResult.recipes)){
-    aiBody = `<div style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8A7E6E;margin-bottom:10px;">✨ Ditt skräddarsydda recept</div>` + recipeResult.recipes.map(recipeCard).join('') + `<div style="height:6px;"></div>`;
-  }
-  const presetHeader = `<div style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8A7E6E;margin-bottom:10px;">📖 Veckans receptbibliotek</div>`;
-  const presetBody = PRESET_RECIPES.map(recipeCard).join('');
-  return intro + inputRow + aiBody + presetHeader + presetBody;
+  const tabRow = `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:18px;padding-bottom:2px;">${tabs}</div>`;
+  const body = list.length ? list.map(recipeCard).join('') :
+    `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;font-size:14px;">${RECIPES.length===0?'Inga recept genererade för din stad än — kolla tillbaka på måndag.':'Inga recept matchar filtret just nu.'}</div>`;
+  return intro + budgetRow + tabRow + body;
 }
+
 function inputStyle(){ return `width:100%;padding:12px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;font-size:15px;font-family:${FAM};color:#2A211A;outline:none;`; }
 function storeOptions(){ return STORES.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join(''); }
 function catOptions(){ return CAT_ORDER.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); }
