@@ -153,7 +153,8 @@ function toggleFollow(storeId){
 function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
     origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price), unit:r.unit||'st', category:r.category||'Skafferivaror',
-    emoji:r.emoji||'🛒', hot:!!r.hot, validTo:r.valid_to||null };
+    emoji:r.emoji||'🛒', hot:!!r.hot, validTo:r.valid_to||null,
+    jamforpris:r.jamforpris!=null?Number(r.jamforpris):null, jamforenhet:r.jamforenhet||null };
 }
 async function loadAreas(){
   try{
@@ -418,11 +419,16 @@ function offerCard(o){
     const daysLeft=Math.round((vt-today)/86400000);
     if(daysLeft<=2){ details=(details?details+' · ':'')+(daysLeft<=0?'⏰ Sista dagen idag':`⏰ Gäller t.o.m. ${WD[vt.getDay()]}`); }
   }
-  const priceRow = `<div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
+  const showJmf = o.jamforpris!=null && !['kg','liter'].includes(o.unit);
+  const jmfRow = showJmf ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">Jämförpris ${kr(o.jamforpris)} ${esc(o.jamforenhet||'')}</div>` : '';
+  const priceRow = `<div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
       <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>
       ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}${unitSuffix(o.unit)}</span>
       <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}${unitSuffix(o.unit)}</span>`:''}
-    </div>`;
+    </div>
+    ${jmfRow}
+  </div>`;
   const badge = hasDisc?`<div style="background:#FBEAE2;color:#C2431F;font-weight:800;font-size:13px;padding:5px 9px;border-radius:10px;flex:none;font-family:${DISP};">-${pct}%</div>`:'';
   const addStyle = added
     ? `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
