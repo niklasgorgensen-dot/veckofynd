@@ -714,7 +714,8 @@ async function loadRecipes(){
     const rows = await supa.selectRaw(`recipes?select=*&area_id=eq.${currentAreaId}&order=category.asc`);
     RECIPES = Array.isArray(rows) ? rows.map(r=>({
       id:r.id, category:r.category, title:r.title, description:r.description, servings:r.servings,
-      steps:r.steps||[], ingredients:r.ingredients||[], estimatedTotalCost:r.estimated_total_cost, matchScore:r.match_score
+      steps:r.steps||[], ingredients:r.ingredients||[], estimatedTotalCost:r.estimated_total_cost, matchScore:r.match_score,
+      kcal:r.kcal, proteinG:r.protein_g, carbsG:r.carbs_g, fatG:r.fat_g
     })) : [];
     recipesLoadedForArea = currentAreaId;
   }catch(e){ RECIPES = []; }
@@ -741,6 +742,12 @@ function recipeCard(r){
       ${matchCount?`<div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${matchCount} fynd använda</div>`:''}
     </div>
     <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:10px;">${r.servings?`${r.servings} port · `:''}${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost)} totalt`:''}</div>
+    ${r.kcal!=null?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:11.5px;font-weight:700;color:#8A5A2B;background:#FBF0DE;padding:4px 9px;border-radius:8px;">${r.kcal} kcal</span>
+      <span style="font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:4px 9px;border-radius:8px;">P ${r.proteinG}g</span>
+      <span style="font-size:11.5px;font-weight:700;color:#7A4FBC;background:#F1EAFB;padding:4px 9px;border-radius:8px;">K ${r.carbsG}g</span>
+      <span style="font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:4px 9px;border-radius:8px;">F ${r.fatG}g</span>
+    </div>`:''}
     ${descHtml}
     <div style="margin-bottom:10px;">${ingRows}</div>
     <div>${steps}</div>
