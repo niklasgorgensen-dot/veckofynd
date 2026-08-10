@@ -742,6 +742,7 @@ function recipeCard(r){
       ${matchCount?`<div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${matchCount} fynd använda</div>`:''}
     </div>
     <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:10px;">${r.servings?`${r.servings} port · `:''}${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost)} totalt`:''}</div>
+    ${r.kcal!=null?`<div style="font-size:10.5px;font-weight:700;color:#B6A893;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Näringsvärde per portion</div>` : ''}
     ${r.kcal!=null?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
       <span style="font-size:11.5px;font-weight:700;color:#8A5A2B;background:#FBF0DE;padding:4px 9px;border-radius:8px;">${r.kcal} kcal</span>
       <span style="font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:4px 9px;border-radius:8px;">P ${r.proteinG}g</span>
