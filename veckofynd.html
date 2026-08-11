@@ -272,6 +272,21 @@ function addSearchHit(dealId){
 }
 let RECIPES = [], recipesLoadedForArea = null, recipeCat = 'alla', showWeeklyMenu = false, weeklyMenu = null;
 let recipeBudget = localStorage.getItem('vf_recipe_budget') || '';
+let householdSize = parseInt(localStorage.getItem('vf_household_size')) || 4;
+function setHouseholdSize(n){ householdSize = Math.max(1, Math.min(10, n)); localStorage.setItem('vf_household_size', householdSize); render(); }
+function scaleAmount(amount, unit, factor){
+  if(!amount || factor===1) return amount;
+  let n;
+  const s = String(amount);
+  if(s.includes('/')){ const [a,b]=s.split('/'); n = parseFloat(a)/parseFloat(b); } else { n = parseFloat(s.replace(',','.')); }
+  if(isNaN(n)) return amount;
+  const scaled = n * factor;
+  const discrete = ['st','förp','paket','burk','skivor','kvistar'];
+  if(discrete.includes(unit)) return String(Math.max(1, Math.ceil(scaled)));
+  if(scaled >= 10) return String(Math.round(scaled/5)*5);
+  if(scaled >= 1) return (Math.round(scaled*2)/2).toString();
+  return (Math.round(scaled*4)/4).toString();
+}
 function header(){
   const wi = getWeekInfo();
   return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
@@ -726,6 +741,7 @@ function setRecipeBudget(v){ recipeBudget = v; localStorage.setItem('vf_recipe_b
 let recipeCardSeq = 0;
 function recipeCard(r){
   const uid = 'r' + (recipeCardSeq++);
+  const scaleFactor = householdSize / (r.servings || 4);
   const descHtml = r.description ? `<div style="margin-bottom:12px;">
       <span id="desc_${uid}" data-expanded="0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;color:#5A4F43;line-height:1.5;">${esc(r.description)}</span>
       <span id="descbtn_${uid}" onclick="toggleDesc('${uid}')" style="display:inline-block;margin-top:4px;color:#4F7A3F;font-weight:700;cursor:pointer;font-size:12.5px;">Läs mer…</span>
@@ -733,7 +749,8 @@ function recipeCard(r){
   const matchCount = (r.ingredients||[]).filter(i=>i.fromDealId).length;
   const ingRows = (r.ingredients||[]).map(ing=>{
     const tag = ing.fromDealId!=null ? `<span style="margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:3px 8px;border-radius:8px;">${esc(storeById(ing.store).name)} · ${kr(ing.price)}</span>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(ing.amount||'')} ${esc(ing.unit||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
+    const scaledAmt = scaleAmount(ing.amount, ing.unit, scaleFactor);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F3ECDF;font-size:13.5px;"><span>${esc(scaledAmt||'')} ${esc(ing.unit||'')} ${esc(ing.name||'')}</span>${tag}</div>`;
   }).join('');
   const steps = (r.steps||[]).map((s,i)=>`<div style="display:flex;gap:10px;padding:6px 0;font-size:13.5px;line-height:1.5;"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#F0E8DA;color:#6A5E50;font-weight:800;font-size:11.5px;display:flex;align-items:center;justify-content:center;">${i+1}</span><span>${esc(s)}</span></div>`).join('');
   return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
@@ -741,7 +758,7 @@ function recipeCard(r){
       <div style="flex:1;font-family:${DISP};font-weight:800;font-size:18px;line-height:1.2;">${esc(r.title||'Recept')}</div>
       ${matchCount?`<div style="flex:none;font-size:11.5px;font-weight:700;color:#C2431F;background:#FBEAE2;padding:5px 9px;border-radius:9px;">${matchCount} fynd använda</div>`:''}
     </div>
-    <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:10px;">${r.servings?`${r.servings} port · `:''}${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost)} totalt`:''}</div>
+    <div style="font-size:12.5px;color:#8A7E6E;margin-bottom:10px;">${householdSize} port · ${r.estimatedTotalCost!=null?`ca ${kr(r.estimatedTotalCost*scaleFactor)} totalt`:''}</div>
     ${r.kcal!=null?`<div style="font-size:10.5px;font-weight:700;color:#B6A893;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Näringsvärde per portion</div>` : ''}
     ${r.kcal!=null?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
       <span style="font-size:11.5px;font-weight:700;color:#8A5A2B;background:#FBF0DE;padding:4px 9px;border-radius:8px;">${r.kcal} kcal</span>
@@ -781,7 +798,8 @@ async function addMenuToShoppingList(){
       const key = (ing.name||'').toLowerCase();
       if(!key) continue;
       if(!merged[key]) merged[key] = { name: ing.name, parts: [], price: null, store: null, fromDealId: null };
-      merged[key].parts.push(`${ing.amount||''} ${ing.unit||''}`.trim());
+      const scaledAmt = scaleAmount(ing.amount, ing.unit, householdSize/(r.servings||4));
+      merged[key].parts.push(`${scaledAmt||''} ${ing.unit||''}`.trim());
       if(ing.fromDealId && merged[key].fromDealId==null){ merged[key].fromDealId = ing.fromDealId; merged[key].price = ing.price; merged[key].store = ing.store; }
     }
   }
@@ -802,7 +820,7 @@ function viewWeeklyMenu(){
   if(!weeklyMenu) return '';
   const totalKcal = weeklyMenu.reduce((s,r)=>s+(r.kcal||0),0);
   const totalProtein = weeklyMenu.reduce((s,r)=>s+(Number(r.proteinG)||0),0);
-  const totalCost = weeklyMenu.reduce((s,r)=>s+(r.estimatedTotalCost||0),0);
+  const totalCost = weeklyMenu.reduce((s,r)=>s+((r.estimatedTotalCost||0)*(householdSize/(r.servings||4))),0);
   const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
   const rows = weeklyMenu.map((r,i)=>`
     <div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;">
@@ -843,6 +861,13 @@ function viewRecipes(){
       <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">40 recept i 4 kategorier genereras automatiskt varje måndag utifrån det som faktiskt är på extrapris just den här veckan — inte alla mallar hittar en match varje vecka.</div>
       <button onclick="showWeeklyMenu=true; render();" style="margin-top:12px;padding:11px 16px;border-radius:12px;border:none;background:#fff;color:#3E6632;font-weight:800;font-size:13px;cursor:pointer;font-family:${FAM};">🗓️ Bygg veckomeny</button>
     </div>`;
+  const householdRow = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#fff;border:1px solid #EFE6D8;border-radius:14px;padding:10px 14px;">
+      <span style="font-size:13px;font-weight:700;color:#6A5E50;">👨‍👩‍👧‍👦 Hushåll</span>
+      <button onclick="setHouseholdSize(householdSize-1)" style="flex:none;width:30px;height:30px;border-radius:9px;border:1px solid #EFE6D8;background:#FBF6EE;font-size:16px;font-weight:800;cursor:pointer;">−</button>
+      <span style="flex:none;min-width:20px;text-align:center;font-weight:800;font-size:14px;">${householdSize}</span>
+      <button onclick="setHouseholdSize(householdSize+1)" style="flex:none;width:30px;height:30px;border-radius:9px;border:1px solid #EFE6D8;background:#FBF6EE;font-size:16px;font-weight:800;cursor:pointer;">+</button>
+      <span style="font-size:12px;color:#8A7E6E;">personer — skalar ingredienser och pris</span>
+    </div>`;
   const budgetRow = `<div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;">
       <input id="recipe_budget" type="number" inputmode="decimal" value="${esc(recipeBudget)}" oninput="setRecipeBudget(this.value)" placeholder="Budget i kr för hela receptet (valfritt)" style="${inputStyle()}">
       ${hasBudget?`<button onclick="setRecipeBudget('')" style="flex:none;padding:0 14px;height:44px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};">Rensa</button>`:''}
@@ -850,7 +875,7 @@ function viewRecipes(){
   const tabRow = `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:18px;padding-bottom:2px;">${tabs}</div>`;
   const body = list.length ? list.map(recipeCard).join('') :
     `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;font-size:14px;">${RECIPES.length===0?'Inga recept genererade för din stad än — kolla tillbaka på måndag.':'Inga recept matchar filtret just nu.'}</div>`;
-  return intro + budgetRow + tabRow + body;
+  return intro + householdRow + budgetRow + tabRow + body;
 }
 
 function inputStyle(){ return `width:100%;padding:12px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;font-size:15px;font-family:${FAM};color:#2A211A;outline:none;`; }
