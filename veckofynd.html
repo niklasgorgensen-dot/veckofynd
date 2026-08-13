@@ -200,7 +200,8 @@ function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
     origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price), unit:r.unit||'st', category:r.category||'Skafferivaror',
     emoji:r.emoji||'🛒', hot:!!r.hot, validTo:r.valid_to||null,
-    jamforpris:r.jamforpris!=null?Number(r.jamforpris):null, jamforenhet:r.jamforenhet||null };
+    jamforpris:r.jamforpris!=null?Number(r.jamforpris):null, jamforenhet:r.jamforenhet||null,
+    brand:r.brand||null, imageUrl:r.image_url||null };
 }
 async function loadAreas(){
   try{
@@ -462,13 +463,20 @@ function detectMember(o){
   if(o.member)                                             return {label:'Kräver medlemskap',color:'#4A4A4A',bg:'#EBEBEB'};
   return null;
 }
+function dealImage(o, size){
+  size = size || 64;
+  const bg = CAT_BG[o.category] || '#EFE7DA';
+  const fallback = `<div style="width:${size}px;height:${size}px;border-radius:16px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.5)}px;flex:none;">${o.emoji||'🛒'}</div>`;
+  if(!o.imageUrl) return fallback;
+  const fbEsc = fallback.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return `<div style="width:${size}px;height:${size}px;border-radius:16px;background:#fff;border:1px solid #EFE6D8;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;padding:6px;box-sizing:border-box;"><img src="${esc(o.imageUrl)}" alt="${esc(o.product)}" loading="lazy" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.outerHTML='${fbEsc}'"></div>`;
+}
 function offerCard(o){
   const st = storeById(o.store);
   const save = (o.origPrice||0) - o.price;
   const hasDisc = save > 0.001;
   const pct = hasDisc && o.origPrice ? Math.round(save/o.origPrice*100) : 0;
   const added = inList(o.id);
-  const bg = CAT_BG[o.category] || '#EFE7DA';
   const member = detectMember(o);
   const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
   let details = o.detail||'';
@@ -492,12 +500,14 @@ function offerCard(o){
   const addStyle = added
     ? `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
     : `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
+  const brandRow = o.brand ? `<div style="font-size:10.5px;font-weight:800;color:#A67C3D;text-transform:uppercase;letter-spacing:.05em;margin-top:5px;">${esc(o.brand)}</div>` : '';
   return `<div style="background:#fff;border:1px solid ${member?member.color+'44':'#EFE6D8'};border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
     <div style="display:flex;align-items:flex-start;gap:12px;">
-      <div style="width:54px;height:54px;border-radius:16px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:28px;flex:none;">${o.emoji||'🛒'}</div>
+      ${dealImage(o,64)}
       <div style="flex:1;min-width:0;">
         <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">${storeLogo(st,16,5)}${esc(st.name)}</span>
-        <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:5px;">${esc(o.product)}</div>
+        ${brandRow}
+        <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:${o.brand?'1px':'5px'};">${esc(o.product)}</div>
         <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
         ${memberBadge}
       </div>
