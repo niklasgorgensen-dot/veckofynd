@@ -103,6 +103,40 @@ async function loadAuthAndHousehold(isRetry){
   }catch(e){ householdLoadError = true; }
   render();
   loadShoppingList();
+  loadWatchlist();
+}
+async function loadShoppingList(){
+  if(!household){ shoppingList=[]; return; }
+  try{
+    const rows = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}&order=inserted_at.asc`);
+    if(Array.isArray(rows)){
+      shoppingList = rows.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
+        origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price)||0, unit:r.unit||'', category:r.category||'Skafferivaror',
+        emoji:r.emoji||'🛒', checked:!!r.checked, qty:r.qty||1, isCustom:!!r.is_custom }));
+      render();
+    }
+  }catch(e){ /* tyst */ }
+}
+async function loadWatchlist(){
+  if(!household){ watchlist=[]; return; }
+  try{
+    const rows = await supa.selectRaw(`watchlist_items?select=*&household_id=eq.${household.id}&order=created_at.asc`);
+    if(Array.isArray(rows)){ watchlist = rows.map(r=>({ id:r.id, term:r.term })); render(); }
+  }catch(e){ /* tyst */ }
+}
+async function addWatchTerm(){
+  if(!session || !household) return;
+  const el = document.getElementById('watch_term');
+  const term = (el||{}).value||'';
+  if(!term.trim()) return;
+  if(watchlist.some(w=>w.term.toLowerCase()===term.trim().toLowerCase())){ showToast('Bevakar redan den varan'); return; }
+  const id = crypto.randomUUID();
+  watchlist.push({ id, term: term.trim() }); if(el) el.value=''; render();
+  try{ await supa.insert('watchlist_items', { id, household_id:household.id, added_by:session.user.id, term: term.trim() }); }catch(e){ /* tyst */ }
+}
+async function removeWatchItem(id){
+  watchlist = watchlist.filter(w=>w.id!==id); render();
+  try{ await supa.deleteWhere('watchlist_items', `id=eq.${id}`); }catch(e){ /* tyst */ }
 }
 async function sendLoginLink(){
   const email = (document.getElementById('auth_email')||{}).value||'';
@@ -110,7 +144,7 @@ async function sendLoginLink(){
   authEmailSent = true; render();
   try{ await sbAuth.auth.signInWithOtp({ email: email.trim(), options:{ emailRedirectTo: window.location.href } }); }catch(e){ /* tyst */ }
 }
-async function signOut(){ await sbAuth.auth.signOut(); session=null; household=null; householdMembers=[]; householdInvites=[]; shoppingList=[]; render(); }
+async function signOut(){ await sbAuth.auth.signOut(); session=null; household=null; householdMembers=[]; householdInvites=[]; shoppingList=[]; watchlist=[]; render(); }
 async function inviteFamilyMember(){
   const el = document.getElementById('invite_email');
   const email = (el||{}).value||'';
@@ -257,31 +291,29 @@ function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
 // ── State ─────────────────────────────────────────────────
 let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
 let shoppingList = [];
+let watchlist = [];
 let searchInput = '', searchResults = null, searchDone = false;
 
 function normalize(s){ return (s||'').toLowerCase().replace(/[åä]/g,'a').replace(/ö/g,'o').replace(/[-_,.]/g,' ').trim(); }
+function matchDealsForTerm(term){
+  const n = normalize(term);
+  return ALL_DEALS.filter(d => {
+    const dp = normalize(d.product), dd = normalize(d.detail||'');
+    return n.split(' ').every(w => dp.includes(w) || dd.includes(w));
+  }).sort((a,b) => ((b.origPrice-b.price)/(b.origPrice||1)) - ((a.origPrice-a.price)/(a.origPrice||1)));
+}
 
 function searchDeals(){
   const el = document.getElementById('deal_search');
   searchInput = el ? el.value.trim() : searchInput;
   if(!searchInput) return;
   const terms = searchInput.split(/[,\n]+/).map(t=>t.trim()).filter(Boolean);
-  searchResults = terms.map(term => {
-    const n = normalize(term);
-    const hits = ALL_DEALS.filter(d => {
-      const dp = normalize(d.product), dd = normalize(d.detail||'');
-      return n.split(' ').every(w => dp.includes(w) || dd.includes(w));
-    }).sort((a,b) => ((b.origPrice-b.price)/(b.origPrice||1)) - ((a.origPrice-a.price)/(a.origPrice||1)));
-    return { term, hits };
-  });
+  searchResults = terms.map(term => ({ term, hits: matchDealsForTerm(term) }));
   searchDone = true;
   render();
 }
 
-function addSearchHit(dealId){
-  const d = ALL_DEALS.find(x=>x.id===dealId);
-  if(d && !inList(d.id)) addItem(d);
-}
+function addSearchHit(dealId){ addOffer(dealId); }
 let RECIPES = [], recipesLoadedForArea = null, recipeCat = 'alla', showWeeklyMenu = false, weeklyMenu = null;
 let recipeBudget = localStorage.getItem('vf_recipe_budget') || '';
 let householdSize = parseInt(localStorage.getItem('vf_household_size')) || 4;
@@ -321,8 +353,8 @@ function header(){
       ${areaSwitcher()}
       <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
     </div>
-    <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
+    <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
     </nav>
   </header>`;
 }
@@ -330,7 +362,7 @@ function inList(id){ return shoppingList.some(i=>i.id===id); }
 async function addOffer(id){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
   if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
-  const o = deals.find(d=>d.id===id); if(!o) return;
+  const o = ALL_DEALS.find(d=>d.id===id); if(!o) return;
   if(inList(id)){ showToast('Redan på listan'); return; }
   const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
   shoppingList.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
@@ -379,7 +411,7 @@ const PAGE='max-width:1080px;margin:0 auto;padding:clamp(16px,4vw,28px);';
 function navBtn(key,label){
   const active = tab===key;
   const badge = key==='lista'&&shoppingList.length ? ' · '+shoppingList.length : '';
-  return `<button onclick="go('${key}')" style="flex:1;padding:10px 8px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
+  return `<button onclick="go('${key}')" style="flex:none;padding:10px 14px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
 }
 function areaSwitcher(){
   const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
@@ -414,8 +446,8 @@ function header(){
       ${areaSwitcher()}
       <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
     </div>
-    <nav style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
+    <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
     </nav>
   </header>`;
 }
@@ -575,11 +607,13 @@ function renderStoreMap(){
   if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
   setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
 }
-function loginGate(){
+function loginGate(title, subtitle){
+  title = title || 'Logga in för att se listan';
+  subtitle = subtitle || 'Inköpslistan delas inom ditt hushåll (upp till 5 mailadresser). Ange din mail så skickar vi en inloggningslänk.';
   return `<div style="text-align:center;padding:40px 20px;">
     <div style="font-size:48px;">🔐</div>
-    <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Logga in för att se listan</div>
-    <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:320px;margin-left:auto;margin-right:auto;">Inköpslistan delas inom ditt hushåll (upp till 5 mailadresser). Ange din mail så skickar vi en inloggningslänk.</div>
+    <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">${esc(title)}</div>
+    <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:320px;margin-left:auto;margin-right:auto;">${esc(subtitle)}</div>
     ${authEmailSent ? `<div style="margin-top:20px;background:#EAF1E3;color:#3E6632;padding:14px;border-radius:14px;font-weight:700;font-size:14px;max-width:320px;margin-left:auto;margin-right:auto;">✓ Länk skickad! Kolla din mail och klicka på länken.</div>` :
     `<div style="margin-top:20px;display:flex;gap:8px;max-width:340px;margin-left:auto;margin-right:auto;">
       <input id="auth_email" type="email" placeholder="din@mail.se" style="flex:1;padding:12px;border-radius:12px;border:1px solid #E3D8C6;font-size:15px;font-family:${FAM};outline:none;">
@@ -716,6 +750,55 @@ function renderSearchResults(){
     </div>
     ${foundRows}${notFoundRows}
   </div>${tipRow}`;
+}
+function watchItemRow(w){
+  const hits = matchDealsForTerm(w.term);
+  const best = hits[0];
+  if(!best){
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:#fff;border:1px solid #EFE6D8;border-radius:16px;margin-bottom:10px;">
+      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14.5px;">${esc(w.term)}</div><div style="font-size:12px;color:#8A7E6E;margin-top:2px;">Inget denna vecka</div></div>
+      <button onclick="removeWatchItem('${w.id}')" style="width:30px;height:30px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:13px;cursor:pointer;flex:none;">✕</button>
+    </div>`;
+  }
+  const st = storeById(best.store);
+  const already = inList(best.id);
+  const disc = best.origPrice > best.price ? Math.round((1-best.price/best.origPrice)*100) : 0;
+  return `<div style="padding:14px 16px;background:#EAF1E3;border:1px solid #CFE0C2;border-radius:16px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14.5px;">${esc(w.term)}</div>
+        <div style="font-size:12px;color:#3E6632;margin-top:2px;font-weight:700;">✓ Matchar! ${esc(best.product)} · ${esc(st.name)} · ${kr(best.price)}${unitSuffix(best.unit)}${disc?` (-${disc}%)`:''}</div>
+      </div>
+      <button onclick="removeWatchItem('${w.id}')" style="width:30px;height:30px;border-radius:9px;border:none;background:#fff;color:#A89A88;font-size:13px;cursor:pointer;flex:none;">✕</button>
+    </div>
+    <button ${already?'':`onclick="addSearchHit(${best.id})"`} style="margin-top:10px;width:100%;padding:10px;border-radius:11px;font-weight:700;font-size:13px;font-family:${FAM};border:${already?'1px solid #CFE0C2':'none'};background:${already?'#fff':'#2A211A'};color:${already?'#3E6632':'#fff'};cursor:${already?'default':'pointer'};">${already?'✓ Tillagd på listan':'+ Lägg till på lista'}</button>
+  </div>`;
+}
+function viewWatchlist(){
+  if(!session) return loginGate('Logga in för att bevaka varor', 'Bevakningar delas inom ditt hushåll. Ange din mail så skickar vi en inloggningslänk.');
+  if(!household){
+    return `<div style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;">⚠️</div>
+      <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Kunde inte ladda ditt hushåll</div>
+      <button onclick="loadAuthAndHousehold()" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Försök igen</button>
+    </div>`;
+  }
+  const matchCount = watchlist.filter(w=>matchDealsForTerm(w.term).length>0).length;
+  const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
+      <div style="font-size:13px;opacity:.92;font-weight:600;">👁️ Bevakningar</div>
+      <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">${watchlist.length?`${matchCount} av ${watchlist.length} bevakade varor matchar veckans erbjudanden.`:'Bevaka en vara eller ett varumärke — vi visar direkt när den går på extrapris.'}</div>
+    </div>`;
+  const addBox = `<div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input id="watch_term" placeholder="t.ex. kycklingfilé, kaffe, laxfilé…" style="${inputStyle()}" onkeydown="if(event.key==='Enter')addWatchTerm()">
+      <button onclick="addWatchTerm()" style="flex:none;padding:0 18px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bevaka</button>
+    </div>`;
+  const rows = watchlist.length ? watchlist.map(watchItemRow).join('') :
+    `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">
+      <div style="font-size:48px;">👁️</div>
+      <div style="font-family:${DISP};font-weight:700;font-size:18px;margin-top:10px;color:#2A211A;">Inget bevakas än</div>
+      <div style="font-size:13.5px;margin-top:6px;">Lägg till en vara ovan så håller vi koll åt dig.</div>
+    </div>`;
+  return intro + addBox + rows;
 }
 function toggleDesc(uid){
   const el = document.getElementById('desc_'+uid);
@@ -935,7 +1018,7 @@ function sheetView(){
 function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">✏️ Erbjudande</button>`; }
 
 function render(){
-  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():viewList();
+  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():tab==='bevaka'?viewWatchlist():viewList();
   document.getElementById('app').innerHTML =
     header() +
     `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
