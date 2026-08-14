@@ -122,10 +122,17 @@ async function loadShoppingList(){
   try{
     const rows = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}&order=inserted_at.asc`);
     if(Array.isArray(rows)){
-      shoppingList = rows.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
+      const next = rows.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
         origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price)||0, unit:r.unit||'', category:r.category||'Skafferivaror',
         emoji:r.emoji||'🛒', checked:!!r.checked, qty:r.qty||1, isCustom:!!r.is_custom }));
-      render();
+      // The 5s poll below re-fetches unconditionally, but a full render() tears
+      // down and rebuilds the entire app (including the offer grid's images)
+      // via innerHTML -- doing that every 5s regardless of change caused the
+      // constant mid-scroll jank users were hitting. Only re-render on an
+      // actual data change (e.g. another household member edited the list).
+      const changed = JSON.stringify(next) !== JSON.stringify(shoppingList);
+      shoppingList = next;
+      if(changed) render();
     }
   }catch(e){ /* tyst */ }
 }
