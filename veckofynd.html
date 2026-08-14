@@ -44,29 +44,39 @@ async function authHeaders(){
 }
 const supa = {
   async selectRaw(path){ const h = await authHeaders(); const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: h }); return r.json(); },
-  async fetchAllDeals(idsCsv, todayStr){
+  // Fetches every row of a query, paginated. Was sequential (one page, await,
+  // next page, await...) -- with 30k+ deals and 29k+ product_store_links rows
+  // that meant 60 round trips taken one at a time, ~14s just to open the app.
+  // PostgREST returns the true row count in the Content-Range header when
+  // asked (Prefer: count=exact), so the first page tells us how many pages
+  // are left -- fire all of those concurrently instead of waiting in turn.
+  async fetchAllPaginated(pathWithoutPaging){
     const pageSize = 1000;
-    let offset = 0, all = [];
-    while(true){
-      const page = await this.selectRaw(`deals?select=*&store_id=in.(${idsCsv})&or=(valid_to.is.null,valid_to.gte.${todayStr})&order=scraped_at.desc,id.asc&limit=${pageSize}&offset=${offset}`);
-      if(!Array.isArray(page) || page.length===0) break;
-      all = all.concat(page);
-      if(page.length < pageSize) break;
-      offset += pageSize;
+    const h = await authHeaders();
+    const firstUrl = `${SUPA_URL}/rest/v1/${pathWithoutPaging}&limit=${pageSize}&offset=0`;
+    const firstRes = await fetch(firstUrl, { headers: { ...h, Prefer: 'count=exact' } });
+    const firstPage = await firstRes.json();
+    if(!Array.isArray(firstPage)) return [];
+    const range = firstRes.headers.get('content-range'); // "0-999/30015"
+    const total = range && range.includes('/') ? parseInt(range.split('/')[1], 10) : NaN;
+    if(!Number.isFinite(total) || total <= firstPage.length) return firstPage;
+
+    const pageCount = Math.ceil(total / pageSize);
+    const requests = [];
+    for(let p = 1; p < pageCount; p++){
+      const offset = p * pageSize;
+      requests.push(fetch(`${SUPA_URL}/rest/v1/${pathWithoutPaging}&limit=${pageSize}&offset=${offset}`, { headers: h }).then(r=>r.json()));
     }
+    const restPages = await Promise.all(requests);
+    let all = firstPage.slice();
+    for(const page of restPages) if(Array.isArray(page)) all = all.concat(page);
     return all;
   },
+  async fetchAllDeals(idsCsv, todayStr){
+    return this.fetchAllPaginated(`deals?select=*&store_id=in.(${idsCsv})&or=(valid_to.is.null,valid_to.gte.${todayStr})&order=scraped_at.desc,id.asc`);
+  },
   async fetchAllProductLinks(idsCsv){
-    const pageSize = 1000;
-    let offset = 0, all = [];
-    while(true){
-      const page = await this.selectRaw(`product_store_links?select=store_id,raw_product_text,product_id&store_id=in.(${idsCsv})&limit=${pageSize}&offset=${offset}`);
-      if(!Array.isArray(page) || page.length===0) break;
-      all = all.concat(page);
-      if(page.length < pageSize) break;
-      offset += pageSize;
-    }
-    return all;
+    return this.fetchAllPaginated(`product_store_links?select=store_id,raw_product_text,product_id&store_id=in.(${idsCsv})`);
   },
   async delete(table, id){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'DELETE', headers: h }); },
   async deleteWhere(table, filter){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`, { method:'DELETE', headers: h }); },
