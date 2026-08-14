@@ -122,7 +122,7 @@ async function loadShoppingList(){
   try{
     const rows = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}&order=inserted_at.asc`);
     if(Array.isArray(rows)){
-      const next = rows.map(r=>({ id:r.id, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
+      const next = rows.map(r=>({ id:r.id, dealId:r.deal_id!=null?Number(r.deal_id):null, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
         origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price)||0, unit:r.unit||'', category:r.category||'Skafferivaror',
         emoji:r.emoji||'🛒', checked:!!r.checked, qty:r.qty||1, isCustom:!!r.is_custom }));
       // The 5s poll below re-fetches unconditionally, but a full render() tears
@@ -410,15 +410,24 @@ function header(){
     </nav>
   </header>`;
 }
-function inList(id){ return shoppingList.some(i=>i.id===id); }
+function inList(dealId){ return shoppingList.some(i=>i.dealId===dealId); }
 async function addOffer(id){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
   if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
   const o = ALL_DEALS.find(d=>d.id===id); if(!o) return;
   if(inList(id)){ showToast('Redan på listan'); return; }
-  const item = { id:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
+  // A shopping_list row's id must be its OWN unique identifier, not the
+  // catalog deal's id -- deals are shared nationally, so reusing o.id here
+  // meant two different households adding the same popular deal collided on
+  // the primary key: RLS blocks the resulting cross-household UPDATE, the
+  // insert silently fails (swallowed by the catch below), and the item
+  // vanishes for the second household on next sync despite showing as
+  // "added" in their UI. dealId is kept separately so inList() can still
+  // detect "this deal is already on my list".
+  const rowId = Date.now() + Math.floor(Math.random()*100000);
+  const item = { id:rowId, dealId:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
   shoppingList.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
-  try{ await supa.insert('shopping_list', { id:item.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('shopping_list', { id:item.id, deal_id:o.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
 }
 async function toggleItem(id){
   const it = shoppingList.find(i=>i.id===id); if(!it) return;
@@ -967,9 +976,9 @@ async function addMenuToShoppingList(){
     const id = Date.now() + Math.floor(Math.random()*100000);
     const isCustom = m.fromDealId == null;
     const st = m.store || 'ovrigt';
-    const item = { id, store: st, product: m.name, detail: m.parts.filter(Boolean).join(' + '), price: m.price||0, origPrice: m.price||0, unit: 'st', category: 'Skafferivaror', emoji: '🛒', checked:false, qty:1, isCustom };
+    const item = { id, dealId: m.fromDealId, store: st, product: m.name, detail: m.parts.filter(Boolean).join(' + '), price: m.price||0, origPrice: m.price||0, unit: 'st', category: 'Skafferivaror', emoji: '🛒', checked:false, qty:1, isCustom };
     shoppingList.push(item); addedCount++;
-    try{ await supa.insert('shopping_list', { id, household_id:household.id, added_by:session.user.id, store:st, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:'st', category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:isCustom }); }catch(e){}
+    try{ await supa.insert('shopping_list', { id, deal_id: m.fromDealId, household_id:household.id, added_by:session.user.id, store:st, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:'st', category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:isCustom }); }catch(e){}
   }
   markWrite(); tab='lista'; showToast(`✓ ${addedCount} varor tillagda från veckomenyn`); render();
 }
