@@ -263,7 +263,7 @@ function mapDealRow(r){
     origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price), unit:r.unit||'st', category:r.category||'Skafferivaror',
     emoji:r.emoji||'🛒', hot:!!r.hot, validTo:r.valid_to||null,
     jamforpris:r.jamforpris!=null?Number(r.jamforpris):null, jamforenhet:r.jamforenhet||null,
-    brand:r.brand||null, imageUrl:r.image_url||null, origin:r.origin||null };
+    brand:r.brand||null, imageUrl:r.image_url||null, origin:r.origin||null, promoLabel:r.promo_label||null };
 }
 async function loadAreas(){
   try{
@@ -577,11 +577,21 @@ function offerCard(o){
     if(daysLeft<=2){ details=(details?details+' · ':'')+(daysLeft<=0?'⏰ Sista dagen idag':`⏰ Gäller t.o.m. ${WD[vt.getDay()]}`); }
   }
   const showJmf = o.jamforpris!=null && !['kg','liter'].includes(o.unit);
-  const jmfRow = showJmf ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">Jämförpris ${kr(o.jamforpris)} ${esc(o.jamforenhet||'')}</div>` : '';
+  // Multi-buy deals ("3 för 25 kr") show promo_label as the headline instead
+  // of a computed per-item price -- the app used to silently divide these
+  // into a "kr/st" figure and show only that, discarding the multi-buy deal
+  // itself (Niklas: "visa erbjudandet som det är"). o.price is still the
+  // correct per-item figure internally (sorting, cheaper-elsewhere), so it's
+  // shown small as a "≈" hint when there's no separate jämförpris already.
+  const jmfRow = showJmf ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">Jämförpris ${kr(o.jamforpris)} ${esc(o.jamforenhet||'')}</div>`
+    : (o.promoLabel ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">≈ ${kr(o.price)}${unitSuffix(o.unit)}</div>` : '');
   const cheaperRow = o.cheaperElsewhere ? `<div style="display:inline-flex;align-items:center;gap:5px;background:#EAF1E3;border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:12px;">💡</span><span style="font-size:11.5px;font-weight:700;color:#3E6632;">Billigare hos ${esc(o.cheaperElsewhere.storeName)}: ${kr(o.cheaperElsewhere.price)}${unitSuffix(o.cheaperElsewhere.unit)}</span></div>` : '';
+  const priceMain = o.promoLabel
+    ? `<span style="font-family:${DISP};font-weight:800;font-size:21px;color:#E0552E;">${esc(o.promoLabel)}</span>`
+    : `<span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>`;
   const priceRow = `<div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
-      <span style="font-family:${DISP};font-weight:800;font-size:25px;color:#E0552E;">${kr(o.price)}<span style="font-size:14px;font-weight:700;">${unitSuffix(o.unit)}</span></span>
+      ${priceMain}
       ${hasDisc?`<span style="font-size:13px;color:#B6A893;text-decoration:line-through;">${kr(o.origPrice)}${unitSuffix(o.unit)}</span>
       <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:5px 9px;border-radius:9px;">Spara ${kr(save)}${unitSuffix(o.unit)}</span>`:''}
     </div>
