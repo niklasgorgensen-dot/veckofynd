@@ -653,9 +653,17 @@ function offerCard(o){
     ${jmfRow}
   </div>`;
   const badge = hasDisc?`<div style="background:#FBEAE2;color:#C2431F;font-weight:800;font-size:13px;padding:5px 9px;border-radius:10px;flex:none;font-family:${DISP};">-${pct}%</div>`:'';
+  // Cards sit in a CSS grid, which stretches every card in a row to match
+  // the tallest one -- but the button just followed the price row inline,
+  // so a card with a short description (e.g. one-line "1095 g") left its
+  // button sitting right under the price while a card with a long flavor
+  // list (e.g. Bryggkaffe's variant names) pushed its button much lower,
+  // making a row of cards look uneven (Niklas: "så det blir symmetriskt").
+  // margin-top:auto inside the card's flex column eats the leftover
+  // stretched space, pinning every button to the same bottom edge.
   const addStyle = added
-    ? `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
-    : `margin-top:2px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
+    ? `margin-top:auto;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
+    : `margin-top:auto;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
   const metaParts = [];
   if(o.brand) metaParts.push(esc(o.brand));
   if(o.origin) metaParts.push(`📍 ${esc(o.origin)}`);
