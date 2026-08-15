@@ -78,6 +78,9 @@ const supa = {
   async fetchAllProductLinks(idsCsv){
     return this.fetchAllPaginated(`product_store_links?select=store_id,raw_product_text,product_id&store_id=in.(${idsCsv})`);
   },
+  async fetchAllProducts(){
+    return this.fetchAllPaginated(`products?select=id,image_url,brand`);
+  },
   async delete(table, id){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'DELETE', headers: h }); },
   async deleteWhere(table, filter){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`, { method:'DELETE', headers: h }); },
   async update(table, id, data){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'PATCH', headers:{...h, Prefer:'return=minimal'}, body: JSON.stringify(data) }); },
@@ -285,10 +288,26 @@ async function loadCatalog(){
     const allIds = ALL_STORES.map(s=>s.id);
     if(allIds.length){
       const todayStr = new Date().toISOString().slice(0,10);
-      const dealRows = await supa.fetchAllDeals(allIds.join(','), todayStr);
+      const [dealRows, linkRows, productRows] = await Promise.all([
+        supa.fetchAllDeals(allIds.join(','), todayStr),
+        supa.fetchAllProductLinks(allIds.join(',')),
+        supa.fetchAllProducts(),
+      ]);
       ALL_DEALS = dealRows.map(mapDealRow);
-      const linkRows = await supa.fetchAllProductLinks(allIds.join(','));
       LINK_BY_KEY = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
+      const productById = new Map(productRows.map(p=>[p.id, p]));
+      // Most chains only put brand/image on a minority of their own deals --
+      // if match-products has already linked this deal's raw text to a
+      // canonical product that SOME other chain supplied brand/image for,
+      // borrow it here rather than leaving the card blank.
+      for(const d of ALL_DEALS){
+        const pid = LINK_BY_KEY.get(`${d.store}::${d.product}`);
+        if(!pid) continue;
+        const p = productById.get(pid);
+        if(!p) continue;
+        if(!d.imageUrl && p.image_url) d.imageUrl = p.image_url;
+        if(!d.brand && p.brand) d.brand = p.brand;
+      }
     } else { ALL_DEALS = []; LINK_BY_KEY = new Map(); }
     recomputeScope();
   }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
