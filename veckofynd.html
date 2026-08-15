@@ -279,13 +279,63 @@ async function loadAreas(){
     } else if(currentAreaId){ const a = AREAS.find(x=>x.id===currentAreaId); if(a) currentAreaName = a.name; }
   }catch(e){ /* offline */ }
 }
-async function loadCatalog(){
-  catalogLoading = true; catalogError = null; render();
+// Most chains only put brand/image on a minority of their own deals -- if
+// match-products has already linked this deal's raw text to a canonical
+// product that SOME other chain supplied brand/image for, borrow it here
+// rather than leaving the card blank.
+function fillSharedBrandImageOrigin(dealRows, linkByKey, productRows){
+  const productById = new Map(productRows.map(p=>[p.id, p]));
+  for(const d of dealRows){
+    const pid = linkByKey.get(`${d.store}::${d.product}`);
+    if(!pid) continue;
+    const p = productById.get(pid);
+    if(!p) continue;
+    if(!d.imageUrl && p.image_url) d.imageUrl = p.image_url;
+    if(!d.brand && p.brand) d.brand = p.brand;
+    if(!d.origin && p.origin) d.origin = p.origin;
+  }
+}
+// With 399 stores and 22k+ live deals nationally, downloading the WHOLE
+// catalog before the first render made the app feel frozen for several
+// seconds on every open, even after fetchAllPaginated already parallelized
+// the page requests -- the bottleneck moved from round-trips to sheer
+// payload size. Fix: fetch only what the user is about to actually SEE
+// (their current area, or their followed stores if they have any -- same
+// priority recomputeScope() itself uses) first and render that immediately,
+// then keep loading the full national catalog in the background so
+// switching city/area, following an out-of-area store, and cross-area
+// search all still work exactly as before once that finishes a moment later.
+async function loadScopedFirst(){
+  let idsCsv = null;
+  if(followedStoreIds.size){
+    idsCsv = Array.from(followedStoreIds).join(',');
+  } else if(currentAreaId){
+    const rows = await supa.selectRaw(`stores?select=id&active=eq.true&area_id=eq.${currentAreaId}`);
+    idsCsv = Array.isArray(rows) && rows.length ? rows.map(r=>r.id).join(',') : null;
+  }
+  if(!idsCsv){ ALL_STORES = []; ALL_DEALS = []; LINK_BY_KEY = new Map(); recomputeScope(); return; }
+  const storeRows = await supa.selectRaw(`stores?select=*&id=in.(${idsCsv})`);
+  ALL_STORES = Array.isArray(storeRows) ? storeRows.map(mapStoreRow) : [];
+  const todayStr = new Date().toISOString().slice(0,10);
+  const [dealRows, linkRows] = await Promise.all([
+    supa.fetchAllDeals(idsCsv, todayStr),
+    supa.fetchAllProductLinks(idsCsv),
+  ]);
+  ALL_DEALS = dealRows.map(mapDealRow);
+  LINK_BY_KEY = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
+  const productIds = Array.from(new Set(linkRows.map(l=>l.product_id).filter(Boolean)));
+  if(productIds.length){
+    const productRows = await supa.fetchAllPaginated(`products?select=id,image_url,brand,origin&id=in.(${productIds.join(',')})`);
+    fillSharedBrandImageOrigin(ALL_DEALS, LINK_BY_KEY, productRows);
+  }
+  recomputeScope();
+}
+async function loadFullCatalogInBackground(){
   try{
-    await loadAreas();
     const allRows = await supa.selectRaw('stores?select=*&active=eq.true&order=name.asc');
-    ALL_STORES = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
-    const allIds = ALL_STORES.map(s=>s.id);
+    const allStores = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
+    const allIds = allStores.map(s=>s.id);
+    let allDeals = [], linkByKey = new Map();
     if(allIds.length){
       const todayStr = new Date().toISOString().slice(0,10);
       const [dealRows, linkRows, productRows] = await Promise.all([
@@ -293,26 +343,22 @@ async function loadCatalog(){
         supa.fetchAllProductLinks(allIds.join(',')),
         supa.fetchAllProducts(),
       ]);
-      ALL_DEALS = dealRows.map(mapDealRow);
-      LINK_BY_KEY = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
-      const productById = new Map(productRows.map(p=>[p.id, p]));
-      // Most chains only put brand/image on a minority of their own deals --
-      // if match-products has already linked this deal's raw text to a
-      // canonical product that SOME other chain supplied brand/image for,
-      // borrow it here rather than leaving the card blank.
-      for(const d of ALL_DEALS){
-        const pid = LINK_BY_KEY.get(`${d.store}::${d.product}`);
-        if(!pid) continue;
-        const p = productById.get(pid);
-        if(!p) continue;
-        if(!d.imageUrl && p.image_url) d.imageUrl = p.image_url;
-        if(!d.brand && p.brand) d.brand = p.brand;
-        if(!d.origin && p.origin) d.origin = p.origin;
-      }
-    } else { ALL_DEALS = []; LINK_BY_KEY = new Map(); }
-    recomputeScope();
+      allDeals = dealRows.map(mapDealRow);
+      linkByKey = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
+      fillSharedBrandImageOrigin(allDeals, linkByKey, productRows);
+    }
+    ALL_STORES = allStores; ALL_DEALS = allDeals; LINK_BY_KEY = linkByKey;
+    recomputeScope(); render();
+  }catch(e){ /* first-paint data is already showing; the next app open retries */ }
+}
+async function loadCatalog(){
+  catalogLoading = true; catalogError = null; render();
+  try{
+    await loadAreas();
+    await loadScopedFirst();
   }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
   catalogLoading = false; render();
+  if(!catalogError) loadFullCatalogInBackground();
 }
 function switchCity(id){
   const c = CITIES.find(x=>x.id===id); if(!c) return;
