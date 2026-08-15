@@ -216,6 +216,7 @@ let LINK_BY_KEY = new Map();
 let catalogLoading = true, catalogError = null;
 let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
 let vfMap = null, vfMapMarkers = {};
+let storeSearchInput = '', storeSearchOrigin = null, storeSearchResults = null, storeSearchLoading = false, storeSearchError = null;
 
 function mapStoreRow(r){
   const fb = CHAIN_FALLBACK[r.chain] || {color:"#B6A893",logo:"🛒"};
@@ -468,33 +469,6 @@ function scaleAmount(amount, unit, factor){
   if(scaled >= 1) return (Math.round(scaled*2)/2).toString();
   return (Math.round(scaled*4)/4).toString();
 }
-function header(){
-  const wi = getWeekInfo();
-  return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
-    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;">
-      <div style="width:42px;height:42px;flex:none;border-radius:14px;background:#E0552E;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(224,85,46,.32);">
-        <svg width="26" height="26" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VeckoFynd">
-          <g transform="rotate(45 54 60)">
-            <path d="M30 36 L78 36 Q90 36 90 48 L90 72 Q90 84 78 84 L42 84 Q30 84 30 72 Z" fill="#FBF6EE"></path>
-            <circle cx="45" cy="51" r="7" fill="#E0552E"></circle>
-          </g>
-          <path d="M54 20 C54 12 49 6 41 5 C41 13 46 19 54 20 Z" fill="#FBF6EE"></path>
-          <path d="M54 20 C54 13 58 8 65 7 C65 14 61 19 54 20 Z" fill="#FBF6EE" opacity="0.72"></path>
-          <rect x="52.4" y="19" width="3.2" height="12" rx="1.6" fill="#FBF6EE"></rect>
-        </svg>
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
-      </div>
-      ${areaSwitcher()}
-      <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
-    </div>
-    <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}
-    </nav>
-  </header>`;
-}
 function inList(dealId){ return shoppingList.some(i=>i.dealId===dealId); }
 async function addOffer(id){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
@@ -710,13 +684,97 @@ function viewOffers(){
     <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>`;
 }
-function storeCard(st, count, save, top, followed){
+// ── Butiker nära dig (postnummer/ort/geolocation sök) ────────
+// North-star feature: search any Swedish postnummer or ort and get the
+// nearest stores back, sorted by distance, regardless of the user's
+// currently selected city/area -- distinct from the existing area
+// dropdown, which only ever lists ONE preset area at a time. Geocoding via
+// Nominatim (OpenStreetMap) since the map already depends on OSM tiles, no
+// new API key needed; distance uses the same flat-earth approximation the
+// backend already uses for area-assignment (accurate enough at this scale,
+// consistent with the rest of the codebase).
+function isSwedishPostalCode(s){ return /^\d{3}\s?\d{2}$/.test(s.trim()); }
+function distanceKm(lat1, lng1, lat2, lng2){
+  const avgLat = (lat1+lat2)/2;
+  const dlat = (lat2-lat1)*111.0;
+  const dlng = (lng2-lng1)*111.0*Math.cos(avgLat*Math.PI/180);
+  return Math.sqrt(dlat*dlat + dlng*dlng);
+}
+async function geocodeLocation(query){
+  const q = query.trim();
+  if(!q) return null;
+  const params = isSwedishPostalCode(q)
+    ? `postalcode=${encodeURIComponent(q)}&country=Sweden`
+    : `q=${encodeURIComponent(q + ', Sverige')}`;
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}&format=jsonv2&limit=1`, { headers: { 'Accept-Language': 'sv' } });
+  if(!res.ok) return null;
+  const rows = await res.json();
+  if(!Array.isArray(rows) || !rows.length) return null;
+  return { lat: Number(rows[0].lat), lng: Number(rows[0].lon), label: rows[0].display_name || q };
+}
+function computeStoreSearchResults(){
+  if(!storeSearchOrigin) return;
+  const { lat, lng } = storeSearchOrigin;
+  storeSearchResults = ALL_STORES
+    .filter(st=>st.lat!=null && st.lng!=null)
+    .map(st=>({ st, dist: distanceKm(lat, lng, st.lat, st.lng) }))
+    .sort((a,b)=>a.dist-b.dist)
+    .slice(0, 24);
+}
+async function searchStoresNear(){
+  const el = document.getElementById('store_search_input');
+  storeSearchInput = el ? el.value.trim() : storeSearchInput;
+  if(!storeSearchInput){ storeSearchError = 'Skriv ett postnummer eller en ort.'; render(); return; }
+  storeSearchLoading = true; storeSearchError = null; render();
+  let origin = null;
+  try{ origin = await geocodeLocation(storeSearchInput); }catch(e){ origin = null; }
+  storeSearchLoading = false;
+  if(!origin){ storeSearchError = `Hittade inte "${storeSearchInput}". Prova ett postnummer (t.ex. 184 40) eller en ort.`; storeSearchResults = null; render(); return; }
+  storeSearchOrigin = origin;
+  computeStoreSearchResults();
+  render();
+}
+function useMyLocation(){
+  if(!navigator.geolocation){ storeSearchError = 'Din enhet stödjer inte platsdelning.'; render(); return; }
+  storeSearchLoading = true; storeSearchError = null; render();
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      storeSearchLoading = false;
+      storeSearchOrigin = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Min plats' };
+      storeSearchInput = 'Min plats';
+      computeStoreSearchResults();
+      render();
+    },
+    ()=>{ storeSearchLoading = false; storeSearchError = 'Kunde inte hämta din plats. Kontrollera platsbehörighet.'; render(); },
+    { timeout: 10000 }
+  );
+}
+function clearStoreSearch(){
+  storeSearchInput=''; storeSearchOrigin=null; storeSearchResults=null; storeSearchError=null; render();
+}
+function storeSearchBox(){
+  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px;margin-bottom:16px;">
+    <div style="font-weight:800;font-family:${DISP};font-size:14px;margin-bottom:8px;">📍 Sök butiker nära dig</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input id="store_search_input" type="text" placeholder="Postnummer eller ort, t.ex. 184 40" value="${esc(storeSearchInput)}" onkeydown="if(event.key==='Enter')searchStoresNear()" style="flex:1;min-width:160px;padding:11px 14px;border-radius:12px;border:1px solid #EFE6D8;font-size:14px;font-family:${FAM};outline:none;">
+      <button onclick="searchStoresNear()" style="padding:11px 16px;border-radius:12px;border:none;background:#2A211A;color:#fff;font-weight:700;font-size:13.5px;font-family:${FAM};cursor:pointer;">Sök</button>
+      <button onclick="useMyLocation()" style="padding:11px 16px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;color:#6A5E50;font-weight:700;font-size:13.5px;font-family:${FAM};cursor:pointer;">📍 Min plats</button>
+    </div>
+    ${storeSearchLoading?`<div style="margin-top:10px;font-size:13px;color:#8A7E6E;">Söker…</div>`:''}
+    ${storeSearchError?`<div style="margin-top:10px;font-size:13px;color:#C2431F;">${esc(storeSearchError)}</div>`:''}
+    ${storeSearchResults?`<button onclick="clearStoreSearch()" style="margin-top:10px;padding:8px 14px;border-radius:11px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:12.5px;font-family:${FAM};cursor:pointer;">✕ Rensa sökning</button>`:''}
+  </div>`;
+}
+function storeCard(st, count, save, top, followed, distKm){
+  const distLabel = distKm!=null
+    ? `${distKm<10?distKm.toFixed(1).replace('.',','):Math.round(distKm)} km${st.address?' · '+st.address:''}`
+    : (st.address||st.distance||'');
   return `<div style="background:#fff;border:1px solid ${followed?'#E0552E':'#EFE6D8'};border-radius:20px;padding:18px;box-shadow:0 2px 10px rgba(42,33,26,.04);">
       <div style="display:flex;align-items:center;gap:12px;">
         ${storeLogo(st,46,14)}
         <div style="flex:1;min-width:0;">
           <div style="font-family:${DISP};font-weight:700;font-size:16px;">${esc(st.name)}</div>
-          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(st.address||st.distance||'')}</div>
+          <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(distLabel)}</div>
         </div>
         <div style="text-align:right;flex:none;">
           <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count}</div>
@@ -748,6 +806,18 @@ function dealsByStore(){
 }
 function viewStores(){
   const byStoreDeals = dealsByStore();
+  const searchBox = storeSearchBox();
+  if(storeSearchResults){
+    const originLabel = storeSearchOrigin && storeSearchOrigin.label ? storeSearchOrigin.label.split(',')[0] : storeSearchInput;
+    const cards = storeSearchResults.map(({st,dist})=>{
+      const {count,save,top} = storeCardData(st, byStoreDeals.get(st.id)||[]);
+      return storeCard(st,count,save,top,followedStoreIds.has(st.id),dist);
+    }).join('');
+    return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${storeSearchResults.length} butiker nära ${esc(originLabel)}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Sorterat efter avstånd — klicka "Följ" för att se erbjudanden härifrån i Erbjudanden-fliken, oavsett vilket område de ligger i.</div></div>
+      ${searchBox}
+      <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker hittades i närheten.</div>`}</div>`;
+  }
   const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
   const byArea = {};
   ALL_STORES.forEach(st=>{
@@ -771,31 +841,43 @@ function viewStores(){
   const heading = followedStoreIds.size ? `Butiker · ${followedStoreIds.size} följs` : 'Butiker i närheten';
   const sub = 'Klicka på en butik eller en nål på kartan för att följa den, oavsett område';
   return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${heading}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">${sub}</div></div>
+    ${searchBox}
     <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
     ${followedStoreIds.size?`<button onclick="clearFollowed()" style="margin-bottom:16px;padding:10px 16px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Rensa valda butiker</button>`:''}
     ${sections || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker att visa.</div>`}`;
 }
 function clearFollowed(){ followedStoreIds.clear(); saveFollowed(); recomputeScope(); render(); }
+function addStoreMarker(st){
+  if(st.lat==null || st.lng==null) return null;
+  const followed = followedStoreIds.has(st.id);
+  const icon = L.divIcon({className:'', html:`<div class="vf-pin" style="background:${followed?'#E0552E':st.color};"><span>${followed?'✓':(st.logo||'🛒')}</span></div>`, iconSize:[30,30], iconAnchor:[15,30]});
+  const marker = L.marker([st.lat, st.lng], {icon}).addTo(vfMap);
+  marker.bindPopup(`<b>${esc(st.name)}</b><br>${followed?'Följs — klicka för att sluta följa':'Klicka på nålen för att följa'}`);
+  marker.on('click', ()=>toggleFollow(st.id));
+  vfMapMarkers[st.id] = marker;
+  return [st.lat, st.lng];
+}
 function renderStoreMap(){
   const el = document.getElementById('vf-map');
-  if(!el || typeof L === 'undefined' || !ALL_STORES.length) return;
+  if(!el || typeof L === 'undefined') return;
   if(vfMap){ try{ vfMap.remove(); }catch(e){} vfMap = null; }
   vfMap = L.map('vf-map', {scrollWheelZoom:false});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
   vfMapMarkers = {};
   const pts = [];
-  const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
-  const mapStores = ALL_STORES.filter(st=> areaCity.get(st.areaId)===currentCityId || followedStoreIds.has(st.id));
-  mapStores.forEach(st=>{
-    if(st.lat==null || st.lng==null) return;
-    pts.push([st.lat, st.lng]);
-    const followed = followedStoreIds.has(st.id);
-    const icon = L.divIcon({className:'', html:`<div class="vf-pin" style="background:${followed?'#E0552E':st.color};"><span>${followed?'✓':(st.logo||'🛒')}</span></div>`, iconSize:[30,30], iconAnchor:[15,30]});
-    const marker = L.marker([st.lat, st.lng], {icon}).addTo(vfMap);
-    marker.bindPopup(`<b>${esc(st.name)}</b><br>${followed?'Följs — klicka för att sluta följa':'Klicka på nålen för att följa'}`);
-    marker.on('click', ()=>toggleFollow(st.id));
-    vfMapMarkers[st.id] = marker;
-  });
+  if(storeSearchResults){
+    if(storeSearchOrigin){
+      pts.push([storeSearchOrigin.lat, storeSearchOrigin.lng]);
+      const originIcon = L.divIcon({className:'', html:'<div class="vf-pin" style="background:#2A211A;"><span>📍</span></div>', iconSize:[30,30], iconAnchor:[15,30]});
+      L.marker([storeSearchOrigin.lat, storeSearchOrigin.lng], {icon: originIcon}).addTo(vfMap).bindPopup('Din sökning');
+    }
+    storeSearchResults.forEach(({st})=>{ const p = addStoreMarker(st); if(p) pts.push(p); });
+  } else {
+    if(!ALL_STORES.length) return;
+    const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
+    const mapStores = ALL_STORES.filter(st=> areaCity.get(st.areaId)===currentCityId || followedStoreIds.has(st.id));
+    mapStores.forEach(st=>{ const p = addStoreMarker(st); if(p) pts.push(p); });
+  }
   if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
   setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
 }
