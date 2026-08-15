@@ -72,8 +72,16 @@ const supa = {
     for(const page of restPages) if(Array.isArray(page)) all = all.concat(page);
     return all;
   },
+  // Trimmed to the columns mapDealRow actually reads -- `select=*` was
+  // pulling ean/limited_days/valid_from/scraped_at/source on every one of
+  // 22k+ rows too (each JSON field repeats its key name per row, so 5 unused
+  // columns cost real bytes at this scale: ~19% smaller payload measured on
+  // a real 200-row sample). order=scraped_at.desc still works even though
+  // scraped_at isn't selected -- PostgREST orders the underlying table, not
+  // the projection.
   async fetchAllDeals(idsCsv, todayStr){
-    return this.fetchAllPaginated(`deals?select=*&store_id=in.(${idsCsv})&or=(valid_to.is.null,valid_to.gte.${todayStr})&order=scraped_at.desc,id.asc`);
+    const cols = 'id,store_id,product,detail,price,orig_price,unit,category,emoji,hot,valid_to,jamforpris,jamforenhet,brand,image_url,origin,promo_label';
+    return this.fetchAllPaginated(`deals?select=${cols}&store_id=in.(${idsCsv})&or=(valid_to.is.null,valid_to.gte.${todayStr})&order=scraped_at.desc,id.asc`);
   },
   async fetchAllProductLinks(idsCsv){
     return this.fetchAllPaginated(`product_store_links?select=store_id,raw_product_text,product_id&store_id=in.(${idsCsv})`);
@@ -305,6 +313,7 @@ function fillSharedBrandImageOrigin(dealRows, linkByKey, productRows){
 // then keep loading the full national catalog in the background so
 // switching city/area, following an out-of-area store, and cross-area
 // search all still work exactly as before once that finishes a moment later.
+const STORE_COLS = 'id,area_id,chain,name,address,distance_km,hours,color,logo_url,website_url,scrape_config,lat,lng';
 async function loadScopedFirst(){
   let idsCsv = null;
   if(followedStoreIds.size){
@@ -314,7 +323,7 @@ async function loadScopedFirst(){
     idsCsv = Array.isArray(rows) && rows.length ? rows.map(r=>r.id).join(',') : null;
   }
   if(!idsCsv){ ALL_STORES = []; ALL_DEALS = []; LINK_BY_KEY = new Map(); recomputeScope(); return; }
-  const storeRows = await supa.selectRaw(`stores?select=*&id=in.(${idsCsv})`);
+  const storeRows = await supa.selectRaw(`stores?select=${STORE_COLS}&id=in.(${idsCsv})`);
   ALL_STORES = Array.isArray(storeRows) ? storeRows.map(mapStoreRow) : [];
   const todayStr = new Date().toISOString().slice(0,10);
   const [dealRows, linkRows] = await Promise.all([
@@ -332,7 +341,7 @@ async function loadScopedFirst(){
 }
 async function loadFullCatalogInBackground(){
   try{
-    const allRows = await supa.selectRaw('stores?select=*&active=eq.true&order=name.asc');
+    const allRows = await supa.selectRaw(`stores?select=${STORE_COLS}&active=eq.true&order=name.asc`);
     const allStores = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
     const allIds = allStores.map(s=>s.id);
     let allDeals = [], linkByKey = new Map();
@@ -409,7 +418,7 @@ function storeLogo(st, size, radius){
   const fallback = `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${st.color};color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:${Math.round(size*0.42)}px;flex:none;">${esc((st.name||'?')[0])}</div>`;
   if(!st.logoUrl) return fallback;
   const fbEsc = fallback.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-  return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:#fff;border:1px solid #EFE6D8;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;padding:${Math.round(size*0.12)}px;box-sizing:border-box;"><img src="${st.logoUrl}" alt="${esc(st.name)}" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.outerHTML='${fbEsc}'"></div>`;
+  return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:#fff;border:1px solid #EFE6D8;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;padding:${Math.round(size*0.12)}px;box-sizing:border-box;"><img src="${st.logoUrl}" alt="${esc(st.name)}" loading="lazy" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.outerHTML='${fbEsc}'"></div>`;
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function kr(n){ if(n==null||isNaN(n)) return '0 kr'; return (Number.isInteger(n)? String(n) : Number(n).toFixed(2).replace('.',',')) + ' kr'; }
@@ -707,22 +716,34 @@ function storeCard(st, count, save, top, followed){
       <button onclick="toggleFollow('${st.id}')" style="margin-top:14px;width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:13.5px;font-family:${FAM};border:1px solid ${followed?'#E0552E':'#E3D8C6'};background:${followed?'#FBEAE2':'#fff'};color:${followed?'#C2431F':'#6A5E50'};cursor:pointer;">${followed?'✓ Följer den här butiken':'+ Följ den här butiken'}</button>
     </div>`;
 }
-function storeCardData(st){
-  const items = ALL_DEALS.filter(o=>o.store===st.id);
+function storeCardData(st, items){
   const save = items.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
   const top = items.slice().sort((a,b)=>((b.origPrice||0)-b.price)-((a.origPrice||0)-a.price)).slice(0,3)
     .map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;gap:10px;"><span style="color:#5A4F43;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.product)}</span><span style="font-weight:800;color:#E0552E;flex:none;font-family:${DISP};">${kr(t.price)}${unitSuffix(t.unit)}</span></div>`).join('');
   return { st, count:items.length, save, top };
 }
+// One pass over ALL_DEALS instead of one ALL_DEALS.filter() PER store --
+// storeCardData used to do that filter itself, so viewStores() cost
+// stores x deals (with the full national catalog loaded, ~399 x 22,476 ~=
+// 8.5M comparisons every time the Butiker tab rendered, visible as jank).
+function dealsByStore(){
+  const m = new Map();
+  for(const d of ALL_DEALS){
+    if(!m.has(d.store)) m.set(d.store, []);
+    m.get(d.store).push(d);
+  }
+  return m;
+}
 function viewStores(){
+  const byStoreDeals = dealsByStore();
+  const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
   const byArea = {};
   ALL_STORES.forEach(st=>{
     const key = st.areaId || '_';
     (byArea[key] = byArea[key] || []).push(st);
   });
   const areaIds = Object.keys(byArea).filter(areaId=>{
-    const a = AREAS.find(x=>x.id===areaId);
-    const inCurrentCity = a ? a.city_id===currentCityId : false;
+    const inCurrentCity = areaCity.get(areaId)===currentCityId;
     const hasFollowed = byArea[areaId].some(st=>followedStoreIds.has(st.id));
     return inCurrentCity || hasFollowed;
   }).sort((a,b)=>(a===currentAreaId?-1:b===currentAreaId?1:0));
@@ -730,7 +751,7 @@ function viewStores(){
     const areaRow = AREAS.find(a=>a.id===areaId) || {};
     const areaName = areaRow.name || 'Övrigt';
     const cityLabel = areaRow.city_id && areaRow.city_id!==currentCityId ? ` · ${esc((CITIES.find(c=>c.id===areaRow.city_id)||{}).name||'')}` : '';
-    const cards = byArea[areaId].map(storeCardData).sort((a,b)=>b.count-a.count)
+    const cards = byArea[areaId].map(st=>storeCardData(st, byStoreDeals.get(st.id)||[])).sort((a,b)=>b.count-a.count)
       .map(({st,count,save,top})=>storeCard(st,count,save,top,followedStoreIds.has(st.id))).join('');
     return `<div style="margin:22px 0 10px;font-weight:800;font-family:${DISP};font-size:14px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">📍 ${esc(areaName)}${cityLabel}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards}</div>`;
@@ -751,10 +772,8 @@ function renderStoreMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
   vfMapMarkers = {};
   const pts = [];
-  const mapStores = ALL_STORES.filter(st=>{
-    const a = AREAS.find(x=>x.id===st.areaId);
-    return (a && a.city_id===currentCityId) || followedStoreIds.has(st.id);
-  });
+  const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
+  const mapStores = ALL_STORES.filter(st=> areaCity.get(st.areaId)===currentCityId || followedStoreIds.has(st.id));
   mapStores.forEach(st=>{
     if(st.lat==null || st.lng==null) return;
     pts.push([st.lat, st.lng]);
