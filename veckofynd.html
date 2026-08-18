@@ -333,11 +333,16 @@ async function loadScopedFirst(){
   ]);
   ALL_DEALS = dealRows.map(mapDealRow);
   LINK_BY_KEY = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
-  const productIds = Array.from(new Set(linkRows.map(l=>l.product_id).filter(Boolean)));
-  if(productIds.length){
-    const productRows = await supa.fetchAllPaginated(`products?select=id,image_url,brand,origin&id=in.(${productIds.join(',')})`);
-    fillSharedBrandImageOrigin(ALL_DEALS, LINK_BY_KEY, productRows);
-  }
+  // Used to filter to id=in.(...) of just this area's linked product IDs --
+  // with match-products now producing 20k+ links nationally, one area's
+  // distinct product-id list grew past the URL length PostgREST/Cloudflare
+  // will accept, so this request 400'd and the whole app got stuck on
+  // "Hämtar veckans erbjudanden…" forever. products is a small table (a
+  // few thousand rows); loadFullCatalogInBackground already fetches it
+  // in full with fetchAllProducts(), so do the same here instead of
+  // filtering by an ever-growing id list in the URL.
+  const productRows = await supa.fetchAllProducts();
+  fillSharedBrandImageOrigin(ALL_DEALS, LINK_BY_KEY, productRows);
   recomputeScope();
 }
 async function loadFullCatalogInBackground(){
