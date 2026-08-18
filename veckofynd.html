@@ -35,6 +35,7 @@
 // ── Supabase ──────────────────────────────────────────────
 const SUPA_URL = 'https://ihyolgjmppzgxhifhooh.supabase.co';
 const SUPA_KEY = 'sb_publishable_rm6yWqFKFiFR3dGaIPnV5w_6r0Jbsx4';
+const APP_VERSION = '2026-08-18';
 const sbAuth = supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 async function authHeaders(){
   const { data } = await sbAuth.auth.getSession();
@@ -94,6 +95,33 @@ const supa = {
   async update(table, id, data){ const h = await authHeaders(); await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, { method:'PATCH', headers:{...h, Prefer:'return=minimal'}, body: JSON.stringify(data) }); },
   async insert(table, row){ const h = await authHeaders(); return fetch(`${SUPA_URL}/rest/v1/${table}`, { method:'POST', headers:{...h, Prefer:'resolution=merge-duplicates'}, body: JSON.stringify(row) }); }
 };
+
+// ── Analytics (see analytics_events / analytics_event_catalog in Supabase) ──
+// One session_id per page load -- lets a future funnel/journey analysis group
+// events without exposing anything more identifying than what's already in
+// user_id_internal/household_id. Never blocks or throws into the caller: a
+// failed analytics write must never break a real user action.
+const ANALYTICS_SESSION_ID = crypto.randomUUID();
+function track(eventName, properties, context, opts){
+  opts = opts || {};
+  const row = {
+    event_id: crypto.randomUUID(),
+    event_name: eventName,
+    event_version: opts.version || 1,
+    occurred_at: new Date().toISOString(),
+    user_id_internal: session ? session.user.id : null,
+    household_id: household ? household.id : null,
+    household_member_id: currentMemberId || null,
+    session_id: ANALYTICS_SESSION_ID,
+    platform: 'web',
+    app_version: APP_VERSION,
+    source: opts.source || 'user_action',
+    context: context || {},
+    properties: properties || {},
+  };
+  try{ supa.insert('analytics_events', row).catch(()=>{ /* tyst, best-effort */ }); }catch(e){ /* tyst */ }
+}
+
 let lastLocalWrite = 0, lastDataHash = '';
 function markWrite(){ lastLocalWrite = Date.now(); }
 let toastMsg = null, toastTimer = null;
@@ -185,6 +213,7 @@ async function createShoppingList(name, seedFollowedStores){
       const storeRows = Array.from(followedStoreIds).map(sid=>({ list_id:id, store_id:sid, active:true }));
       for(const sr of storeRows){ try{ await supa.insert('shopping_list_stores', sr); }catch(e){} }
     }
+    track('shopping_list_created', { list_id:id }, { seeded_from_followed_stores: !!(seedFollowedStores && followedStoreIds.size) }, { source: name==='Veckohandling' ? 'system_generated' : 'user_action' });
     return row;
   }catch(e){ return null; }
 }
@@ -254,8 +283,10 @@ async function addListStore(storeId){
 }
 async function setListStrategy(strategy){
   const l = shoppingLists.find(x=>x.id===currentListId); if(!l) return;
+  const previousStrategy = l.strategy;
   l.strategy = strategy; render();
   try{ await supa.update('shopping_lists', currentListId, { strategy }); }catch(e){}
+  if(previousStrategy !== strategy) track('shopping_strategy_changed', { list_id:currentListId, new_strategy:strategy, previous_strategy:previousStrategy }, {});
 }
 function setListView(v){ listView = v; localStorage.setItem('vf_list_view', v); render(); }
 
@@ -416,10 +447,13 @@ async function addWatchTerm(){
   const id = crypto.randomUUID();
   watchlist.push({ id, term: term.trim() }); if(el) el.value=''; render();
   try{ await supa.insert('watchlist_items', { id, household_id:household.id, added_by:session.user.id, term: term.trim() }); }catch(e){ /* tyst */ }
+  track('watchlist_term_added', { term: term.trim() }, {});
 }
 async function removeWatchItem(id){
+  const w = watchlist.find(x=>x.id===id);
   watchlist = watchlist.filter(w=>w.id!==id); render();
   try{ await supa.deleteWhere('watchlist_items', `id=eq.${id}`); }catch(e){ /* tyst */ }
+  track('watchlist_term_removed', { term: w?w.term:null }, {});
 }
 // Personal tracking (goals/activity/food) belongs to a HouseholdMember, not
 // directly to a login -- a household can include people with no account of
@@ -488,20 +522,25 @@ async function saveNewGoal(){
   memberGoals.push(mapGoalRow(row));
   goalFormOpen = false; render(); showToast('✓ Mål tillagt');
   try{ await supa.insert('member_goals', row); }catch(e){ /* tyst */ }
+  track('goal_selected', { goal_type:row.goal_type, priority:row.priority }, { precision_level:row.precision_level, calorie_strategy:row.calorie_strategy });
 }
 async function pauseGoal(goalId){
   const g = memberGoals.find(x=>x.id===goalId); if(!g) return;
   g.status = 'paused'; render();
   try{ await supa.update('member_goals', goalId, { status:'paused' }); }catch(e){ /* tyst */ }
+  track('goal_paused', { goal_id:goalId }, { goal_type:g.goalType });
 }
 async function resumeGoal(goalId){
   const g = memberGoals.find(x=>x.id===goalId); if(!g) return;
   g.status = 'active'; g.pausedUntil = null; render();
   try{ await supa.update('member_goals', goalId, { status:'active', paused_until:null }); }catch(e){ /* tyst */ }
+  track('goal_resumed', { goal_id:goalId }, { goal_type:g.goalType });
 }
 async function archiveGoal(goalId){
+  const g = memberGoals.find(x=>x.id===goalId);
   memberGoals = memberGoals.filter(g=>g.id!==goalId); render();
   try{ await supa.update('member_goals', goalId, { status:'archived' }); }catch(e){ /* tyst */ }
+  track('goal_removed', { goal_id:goalId }, { goal_type: g?g.goalType:null });
 }
 // The dashboard needs exactly one kcal target to compute "kcal kvar idag"
 // against -- the active PRIMARY goal that actually has a kcal target (a
@@ -543,6 +582,11 @@ async function logRecipeEaten(recipeId){
   const entry = { id, description:r.title, kcal:r.kcal||0, proteinG:Number(r.proteinG)||0, carbsG:Number(r.carbsG)||0, fatG:Number(r.fatG)||0, source:'recipe:'+recipeId };
   todayFoodLogs.push(entry); render(); showToast(`✓ ${r.title} loggad`);
   try{ await supa.insert('food_logs', { id, household_member_id:currentMemberId, log_date:todayDateStr(), description:entry.description, kcal:entry.kcal, protein_g:entry.proteinG, carbs_g:entry.carbsG, fat_g:entry.fatG, source:entry.source }); }catch(e){ /* tyst */ }
+  // Recipe-level nutrition facts only (recipe_id/category/kcal-per-portion) --
+  // never the member's own consumption totals or health data, which stays
+  // out of the analytics pipeline entirely (see analytics_event_catalog: no
+  // event carries activity_logs/food_logs personal totals).
+  track('recipe_selected', { recipe_id:recipeId }, { recipe_category:r.category, calories_per_portion:r.kcal, protein_per_portion:r.proteinG });
 }
 async function removeFoodLog(id){
   todayFoodLogs = todayFoodLogs.filter(f=>f.id!==id); render();
@@ -558,6 +602,7 @@ async function addHouseholdMember(){
   const row = { id, household_id:household.id, display_name:name.trim(), is_owner:false, user_id:null, email:null };
   householdMembers.push(row); if(el) el.value=''; render();
   try{ await supa.insert('household_members', row); }catch(e){ /* tyst */ }
+  track('household_member_added', { member_id:id, has_account:false }, {});
 }
 async function sendLoginLink(){
   const email = (document.getElementById('auth_email')||{}).value||'';
@@ -665,8 +710,10 @@ function annotateCheaperElsewhere(scopedDeals){
   }
 }
 function toggleFollow(storeId){
-  if(followedStoreIds.has(storeId)) followedStoreIds.delete(storeId); else followedStoreIds.add(storeId);
+  const wasFollowed = followedStoreIds.has(storeId);
+  if(wasFollowed) followedStoreIds.delete(storeId); else followedStoreIds.add(storeId);
   saveFollowed(); recomputeScope(); render();
+  track(wasFollowed ? 'store_unfollowed' : 'store_followed', { store_id: storeId }, { area_id: currentAreaId });
 }
 function mapDealRow(r){
   return { id:r.id, store:r.store_id, product:r.product, detail:r.detail||'', price:Number(r.price),
@@ -917,6 +964,9 @@ async function addOffer(id){
   listItems.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:item.detail, category:item.category, emoji:item.emoji,
     quantity:1, unit:item.unit, deal_id:o.id, preferred_store_id:o.store, recommended_store_id:o.store, estimated_price:o.price, is_checked:false, source:'offer', added_by:session.user.id }); }catch(e){ /* tyst */ }
+  const discountPct = o.origPrice>0 ? Math.round((1-o.price/o.origPrice)*100) : null;
+  track('offer_added_to_shopping_list', { deal_id:o.id, store_id:o.store, product_category:o.category, regular_price:o.origPrice, offer_price:o.price, discount_percent:discountPct }, {});
+  track('shopping_list_item_added', { item_id:itemId, source:'offer', category:o.category }, {});
 }
 async function toggleItem(id){
   const it = listItems.find(i=>i.id===id); if(!it) return;
@@ -924,8 +974,10 @@ async function toggleItem(id){
   try{ await supa.update('shopping_list_items', id, { is_checked: it.checked }); }catch(e){ /* tyst */ }
 }
 async function removeItem(id){
+  const it = listItems.find(i=>i.id===id);
   listItems = listItems.filter(i=>i.id!==id); markWrite(); render();
   try{ await supa.delete('shopping_list_items', id); }catch(e){ /* tyst */ }
+  track('shopping_list_item_removed', { item_id:id, source: it?it.source:null }, {});
 }
 async function setManualStoreOverride(itemId, storeId){
   const it = listItems.find(i=>i.id===itemId); if(!it) return;
@@ -1178,6 +1230,7 @@ async function searchStoresNear(){
   storeSearchOrigin = origin;
   computeStoreSearchResults();
   render();
+  track('store_search_performed', { query_type: isSwedishPostalCode(storeSearchInput)?'postnummer':'ort', result_count: (storeSearchResults||[]).length }, {}, { source:'user_action' });
 }
 function useMyLocation(){
   if(!navigator.geolocation){ storeSearchError = 'Din enhet stödjer inte platsdelning.'; render(); return; }
@@ -1189,6 +1242,7 @@ function useMyLocation(){
       storeSearchInput = 'Min plats';
       computeStoreSearchResults();
       render();
+      track('store_search_performed', { query_type:'geolocation', result_count: (storeSearchResults||[]).length }, {});
     },
     ()=>{ storeSearchLoading = false; storeSearchError = 'Kunde inte hämta din plats. Kontrollera platsbehörighet.'; render(); },
     { timeout: 10000 }
