@@ -530,7 +530,7 @@ let ALL_DEALS = [];
 let LINK_BY_KEY = new Map();
 let catalogLoading = true, catalogError = null;
 let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
-let vfMap = null, vfMapMarkers = {};
+let vfMap = null, vfMapMarkers = {}, vfMapResizeObserver = null;
 let storeSearchInput = '', storeSearchOrigin = null, storeSearchResults = null, storeSearchLoading = false, storeSearchError = null;
 
 function mapStoreRow(r){
@@ -568,6 +568,7 @@ function recomputeScope(){
   const ids = new Set(STORES.map(s=>s.id));
   deals = ALL_DEALS.filter(d=>ids.has(d.store));
   annotateCheaperElsewhere(deals);
+  offersVisibleCount = OFFERS_PAGE_SIZE;
 }
 // For each deal, checks whether the same canonical product (via product_store_links,
 // built by match-products) is cheaper at another store within the current scope.
@@ -770,6 +771,12 @@ function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
 
 // ── State ─────────────────────────────────────────────────
 let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
+// Rendering all of a large area's deals in one un-paginated grid made the
+// page thousands of px tall (measured: 646 deals -> ~158,000px scroll
+// height) -- catastrophic on mobile (huge DOM, janky scroll, felt "buggy").
+// Page it instead; resets whenever the category filter or scope changes.
+const OFFERS_PAGE_SIZE = 40;
+let offersVisibleCount = OFFERS_PAGE_SIZE;
 let watchlist = [];
 let searchInput = '', searchResults = null, searchDone = false;
 
@@ -912,7 +919,7 @@ function areaSwitcher(){
 function header(){
   const wi = getWeekInfo();
   return `<header style="position:sticky;top:0;z-index:20;background:rgba(251,246,238,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid #ECE2D2;">
-    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;">
+    <div style="max-width:1080px;margin:0 auto;padding:13px clamp(16px,4vw,28px) 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="width:42px;height:42px;flex:none;border-radius:14px;background:#E0552E;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(224,85,46,.32);">
         <svg width="26" height="26" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VeckoFynd">
           <g transform="rotate(45 54 60)">
@@ -924,12 +931,14 @@ function header(){
           <rect x="52.4" y="19" width="3.2" height="12" rx="1.6" fill="#FBF6EE"></rect>
         </svg>
       </div>
-      <div style="flex:1;min-width:0;">
+      <div style="flex:1 1 150px;min-width:150px;">
         <div style="font-family:${DISP};font-weight:800;font-size:21px;line-height:1;letter-spacing:-.02em;">VeckoFynd</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
+        <div style="font-size:12.5px;color:#8A7E6E;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📍 ${esc(currentCityName)} · ${esc(currentAreaName)} · Vecka ${wi.week}</div>
       </div>
-      ${areaSwitcher()}
-      <button onclick="openSheet('vara')" style="width:42px;height:42px;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
+      <div style="flex:none;margin-left:auto;display:flex;align-items:center;gap:8px;">
+        ${areaSwitcher()}
+        <button onclick="openSheet('vara')" style="width:42px;height:42px;flex:none;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
+      </div>
     </div>
     <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
       ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}${navBtn('halsa','💪 Hälsa')}
@@ -1037,7 +1046,10 @@ function viewOffers(){
   const chips = chipDefs.map(c=>{ const a=cat===c;
     return `<button onclick="setCat('${c.replace(/'/g,"\\'")}')" style="padding:9px 15px;border-radius:12px;border:${a?'none':'1px solid #EFE6D8'};background:${a?'#E0552E':'#fff'};color:${a?'#fff':'#6A5E50'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;font-family:${FAM};flex:none;">${esc(c)}</button>`; }).join('');
   const visible = cat==='Alla'? deals : deals.filter(o=>o.category===cat);
-  const grid = visible.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga erbjudanden i denna kategori.</div>`;
+  const shown = visible.slice(0, offersVisibleCount);
+  const grid = shown.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga erbjudanden i denna kategori.</div>`;
+  const remaining = visible.length - shown.length;
+  const moreBtn = remaining>0 ? `<button onclick="showMoreOffers()" style="width:100%;margin-top:16px;padding:14px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;color:#2A211A;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Visa fler (${Math.min(remaining,OFFERS_PAGE_SIZE)} till, ${remaining} kvar)</button>` : '';
   return `<div style="background:linear-gradient(135deg,#E0552E,#C2431F);border-radius:22px;padding:20px 22px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 12px 28px rgba(224,85,46,.26);margin-bottom:18px;">
       <div style="flex:1;">
         <div style="font-size:13px;opacity:.92;font-weight:600;">Veckans potential</div>
@@ -1047,7 +1059,8 @@ function viewOffers(){
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
     <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>`;
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>
+    ${moreBtn}`;
 }
 // ── Butiker nära dig (postnummer/ort/geolocation sök) ────────
 // North-star feature: search any Swedish postnummer or ort and get the
@@ -1225,6 +1238,7 @@ function addStoreMarker(st){
 function renderStoreMap(){
   const el = document.getElementById('vf-map');
   if(!el || typeof L === 'undefined') return;
+  if(vfMapResizeObserver){ try{ vfMapResizeObserver.disconnect(); }catch(e){} vfMapResizeObserver = null; }
   if(vfMap){ try{ vfMap.remove(); }catch(e){} vfMap = null; }
   vfMap = L.map('vf-map', {scrollWheelZoom:false});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(vfMap);
@@ -1245,6 +1259,17 @@ function renderStoreMap(){
   }
   if(pts.length) vfMap.fitBounds(pts, {padding:[24,24], maxZoom:14});
   setTimeout(()=>vfMap && vfMap.invalidateSize(), 80);
+  // A fixed 80ms guess at "the container has its final layout by now" can be
+  // wrong (slow device, web-font reflow, the innerHTML swap still settling),
+  // and a stale Leaflet tile-grid size after that is exactly what makes the
+  // map visually spill over/overlap whatever sits below it. A ResizeObserver
+  // catches every REAL size change (not just the first guessed one) for as
+  // long as this map instance is alive, so it self-corrects regardless of
+  // timing instead of hoping one delayed check was late enough.
+  if(typeof ResizeObserver !== 'undefined'){
+    vfMapResizeObserver = new ResizeObserver(()=>{ if(vfMap) vfMap.invalidateSize(); });
+    vfMapResizeObserver.observe(el);
+  }
 }
 function loginGate(title, subtitle){
   title = title || 'Logga in för att se listan';
@@ -1867,7 +1892,8 @@ function render(){
   if(tab==='butiker' && !catalogLoading) setTimeout(renderStoreMap, 0);
 }
 function go(t){ tab=t; if(t!=='erbjudanden') cat='Alla'; render(); }
-function setCat(c){ cat=c; render(); }
+function setCat(c){ cat=c; offersVisibleCount=OFFERS_PAGE_SIZE; render(); }
+function showMoreOffers(){ offersVisibleCount += OFFERS_PAGE_SIZE; render(); }
 function openSheet(m){ sheet=true; mode=m; render(); }
 function closeSheet(){ sheet=null; render(); }
 function setMode(m){ mode=m; render(); }
