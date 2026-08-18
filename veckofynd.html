@@ -141,24 +141,257 @@ async function loadAuthAndHousehold(isRetry){
   loadTodayActivity();
   loadTodayFoodLogs();
 }
+// ── Multi-store shopping lists ───────────────────────────────
+// A household can have several named lists (Veckohandling, Fredagsmiddag, ...),
+// each spanning multiple active stores at once -- the user always works from
+// ONE list; the store breakdown is a VIEW on top of it, never a separate list
+// per store. `shopping_list_items.manual_store_override` always wins over the
+// optimizer; `recommended_store_id` is what the deterministic engine below
+// picks when there's no override.
+let shoppingLists = [], currentListId = localStorage.getItem('vf_current_list_id') || null;
+let listStores = []; // [{storeId, active}] for currentListId
+let listItems = [];  // items for currentListId
+let listView = localStorage.getItem('vf_list_view') || 'alla'; // 'alla' | 'perbutik' | 'billigast'
 async function loadShoppingList(){
-  if(!household){ shoppingList=[]; return; }
+  if(!household){ shoppingLists=[]; currentListId=null; listStores=[]; listItems=[]; return; }
   try{
-    const rows = await supa.selectRaw(`shopping_list?select=*&household_id=eq.${household.id}&order=inserted_at.asc`);
-    if(Array.isArray(rows)){
-      const next = rows.map(r=>({ id:r.id, dealId:r.deal_id!=null?Number(r.deal_id):null, store:r.store, product:r.product, detail:r.detail||'', price:Number(r.price)||0,
-        origPrice:r.orig_price!=null?Number(r.orig_price):Number(r.price)||0, unit:r.unit||'', category:r.category||'Skafferivaror',
-        emoji:r.emoji||'🛒', checked:!!r.checked, qty:r.qty||1, isCustom:!!r.is_custom }));
-      // The 5s poll below re-fetches unconditionally, but a full render() tears
-      // down and rebuilds the entire app (including the offer grid's images)
-      // via innerHTML -- doing that every 5s regardless of change caused the
-      // constant mid-scroll jank users were hitting. Only re-render on an
-      // actual data change (e.g. another household member edited the list).
-      const changed = JSON.stringify(next) !== JSON.stringify(shoppingList);
-      shoppingList = next;
-      if(changed) render();
+    const rows = await supa.selectRaw(`shopping_lists?select=*&household_id=eq.${household.id}&order=created_at.asc`);
+    shoppingLists = Array.isArray(rows) ? rows : [];
+    if(!shoppingLists.length){
+      const created = await createShoppingList('Veckohandling', true);
+      if(created) shoppingLists = [created];
     }
+    if(!currentListId || !shoppingLists.some(l=>l.id===currentListId)){
+      currentListId = shoppingLists[0]?.id || null;
+      if(currentListId) localStorage.setItem('vf_current_list_id', currentListId);
+    }
+    await loadCurrentListDetail();
   }catch(e){ /* tyst */ }
+}
+async function createShoppingList(name, seedFollowedStores){
+  if(!session || !household) return null;
+  const id = crypto.randomUUID();
+  const row = { id, household_id:household.id, name, strategy:'cheapest', created_by:session.user.id };
+  try{
+    await supa.insert('shopping_lists', row);
+    if(seedFollowedStores && followedStoreIds.size){
+      const storeRows = Array.from(followedStoreIds).map(sid=>({ list_id:id, store_id:sid, active:true }));
+      for(const sr of storeRows){ try{ await supa.insert('shopping_list_stores', sr); }catch(e){} }
+    }
+    return row;
+  }catch(e){ return null; }
+}
+async function loadCurrentListDetail(){
+  if(!currentListId){ listStores=[]; listItems=[]; return; }
+  try{
+    const [storeRows, itemRows] = await Promise.all([
+      supa.selectRaw(`shopping_list_stores?select=*&list_id=eq.${currentListId}`),
+      supa.selectRaw(`shopping_list_items?select=*&list_id=eq.${currentListId}&order=created_at.asc`),
+    ]);
+    listStores = Array.isArray(storeRows) ? storeRows.map(r=>({ storeId:r.store_id, active:!!r.active })) : [];
+    const nextItems = Array.isArray(itemRows) ? itemRows.map(r=>({ id:r.id, product:r.product, detail:r.detail||'', category:r.category||'Skafferivaror',
+      emoji:r.emoji||'🛒', quantity:r.quantity||1, unit:r.unit||'', dealId:r.deal_id!=null?Number(r.deal_id):null,
+      preferredStoreId:r.preferred_store_id, recommendedStoreId:r.recommended_store_id, manualStoreOverride:r.manual_store_override,
+      estimatedPrice:r.estimated_price!=null?Number(r.estimated_price):null, checked:!!r.is_checked, source:r.source||'manual' })) : [];
+    const changed = JSON.stringify(nextItems) !== JSON.stringify(listItems);
+    listItems = nextItems;
+    if(changed) render();
+  }catch(e){ /* tyst */ }
+}
+async function switchShoppingList(id){
+  currentListId = id; localStorage.setItem('vf_current_list_id', id); render();
+  await loadCurrentListDetail(); render();
+}
+async function addShoppingList(){
+  const el = document.getElementById('new_list_name');
+  const name = (el||{}).value||'';
+  if(!name.trim()) return;
+  const created = await createShoppingList(name.trim(), true);
+  if(created){ shoppingLists.push(created); currentListId = created.id; localStorage.setItem('vf_current_list_id', created.id); if(el) el.value=''; showToast(`✓ Lista "${created.name}" skapad`); await loadCurrentListDetail(); render(); }
+}
+async function renameShoppingList(id, name){
+  const l = shoppingLists.find(x=>x.id===id); if(!l || !name.trim()) return;
+  l.name = name.trim(); render();
+  try{ await supa.update('shopping_lists', id, { name:l.name }); }catch(e){}
+}
+async function deleteShoppingList(id){
+  if(shoppingLists.length<=1){ showToast('Du måste ha minst en lista'); return; }
+  shoppingLists = shoppingLists.filter(l=>l.id!==id);
+  if(currentListId===id){ currentListId = shoppingLists[0].id; localStorage.setItem('vf_current_list_id', currentListId); }
+  render();
+  try{ await supa.delete('shopping_lists', id); }catch(e){}
+  await loadCurrentListDetail(); render();
+}
+function isStoreActiveOnList(storeId){ const s = listStores.find(x=>x.storeId===storeId); return s ? s.active : false; }
+function activeListStoreIds(){ return new Set(listStores.filter(s=>s.active).map(s=>s.storeId)); }
+async function toggleListStore(storeId){
+  const existing = listStores.find(s=>s.storeId===storeId);
+  if(existing){ existing.active = !existing.active; } else { listStores.push({ storeId, active:true }); }
+  render();
+  // shopping_list_stores has a composite (list_id,store_id) primary key, not a
+  // single `id` column, so the generic supa.update(table,id,data) helper (which
+  // does ?id=eq.<id>) can't target it -- upsert via merge-duplicates instead,
+  // which is correct whether the row already existed or not.
+  try{
+    await fetch(`${SUPA_URL}/rest/v1/shopping_list_stores`, { method:'POST', headers:{...(await authHeaders()), Prefer:'resolution=merge-duplicates'},
+      body: JSON.stringify({ list_id:currentListId, store_id:storeId, active: listStores.find(s=>s.storeId===storeId).active }) });
+  }catch(e){ /* tyst */ }
+}
+async function addListStore(storeId){
+  if(listStores.some(s=>s.storeId===storeId)){ await toggleListStore(storeId); return; }
+  listStores.push({ storeId, active:true }); render();
+  try{ await supa.insert('shopping_list_stores', { list_id:currentListId, store_id:storeId, active:true }); }catch(e){}
+  if(!followedStoreIds.has(storeId)){
+    showToast('✓ Butik tillagd på listan');
+  }
+}
+async function setListStrategy(strategy){
+  const l = shoppingLists.find(x=>x.id===currentListId); if(!l) return;
+  l.strategy = strategy; render();
+  try{ await supa.update('shopping_lists', currentListId, { strategy }); }catch(e){}
+}
+function setListView(v){ listView = v; localStorage.setItem('vf_list_view', v); render(); }
+
+// ── Deterministic store-optimization engine (no AI here, ever) ──────────
+// Given the list's items and its active stores, decides which store each
+// item should be bought at. A manual_store_override always wins outright.
+// Otherwise candidate prices for an item come from the SAME canonical-
+// product matching (product_store_links, built by match-products) that
+// already powers the "cheaper elsewhere" badge -- reused here rather than
+// reinvented, since it's the only real signal this app has for "is this
+// the same product at another store." Items with no canonical match (e.g.
+// a free-text manual entry with no matching offer anywhere) simply have no
+// comparable price and stay pinned to their preferred/origin store.
+function buildProductPriceIndex(){
+  const byProduct = new Map();
+  for(const d of ALL_DEALS){
+    const pid = LINK_BY_KEY.get(`${d.store}::${d.product}`);
+    if(!pid) continue;
+    if(!byProduct.has(pid)) byProduct.set(pid, []);
+    byProduct.get(pid).push(d);
+  }
+  return byProduct;
+}
+function candidatesForItem(item, priceIndex){
+  let pid = null;
+  if(item.dealId!=null){
+    const origDeal = ALL_DEALS.find(d=>d.id===item.dealId);
+    if(origDeal) pid = LINK_BY_KEY.get(`${origDeal.store}::${origDeal.product}`);
+  }
+  if(pid && priceIndex.has(pid)){
+    return priceIndex.get(pid).map(d=>({ storeId:d.store, price:d.price, dealId:d.id, unit:d.unit }));
+  }
+  const fallbackStore = item.manualStoreOverride || item.preferredStoreId || item.recommendedStoreId;
+  if(fallbackStore){
+    return [{ storeId:fallbackStore, price:item.estimatedPrice, dealId:item.dealId, unit:item.unit }];
+  }
+  return [];
+}
+// Cheapest available candidate for an item restricted to a given store set
+// (or all candidates if storeSet is null, i.e. unconstrained "cheapest" strategy).
+function cheapestWithin(candidates, storeSet){
+  const pool = storeSet ? candidates.filter(c=>storeSet.has(c.storeId)) : candidates;
+  if(!pool.length) return null;
+  return pool.reduce((best,c)=> (c.price==null ? best : (!best || (best.price!=null && c.price<best.price) || best.price==null) ? c : best), null);
+}
+function totalCostForStoreSet(itemCands, storeSet){
+  let total = 0, unavailable = 0;
+  const perStore = {};
+  for(const {item, candidates} of itemCands){
+    if(item.manualStoreOverride){
+      const locked = candidates.find(c=>c.storeId===item.manualStoreOverride) || { storeId:item.manualStoreOverride, price:item.estimatedPrice||0 };
+      total += (locked.price||0)*item.quantity; perStore[locked.storeId] = (perStore[locked.storeId]||0)+(locked.price||0)*item.quantity;
+      continue;
+    }
+    const best = cheapestWithin(candidates, storeSet);
+    if(!best || best.price==null){ unavailable++; continue; }
+    total += best.price*item.quantity; perStore[best.storeId] = (perStore[best.storeId]||0)+best.price*item.quantity;
+  }
+  return { total, unavailable, perStore };
+}
+// Core entry point: returns { assignments:{itemId:{storeId,price,locked,available}}, perStoreTotal:{storeId:kr}, totalCost, unavailableCount }
+function computeListOptimization(strategyOverride){
+  const priceIndex = buildProductPriceIndex();
+  const activeIds = activeListStoreIds();
+  const itemCands = listItems.map(item=>({ item, candidates:candidatesForItem(item, priceIndex) }));
+  const strategy = strategyOverride || (shoppingLists.find(l=>l.id===currentListId)||{}).strategy || 'cheapest';
+
+  let chosenStoreSet = activeIds; // default: every active store is fair game (cheapest / balance start here)
+  if(strategy==='single_store' && activeIds.size){
+    let best = null;
+    for(const sid of activeIds){
+      const r = totalCostForStoreSet(itemCands, new Set([sid]));
+      if(!best || r.unavailable<best.r.unavailable || (r.unavailable===best.r.unavailable && r.total<best.r.total)) best = { sid, r };
+    }
+    if(best) chosenStoreSet = new Set([best.sid]);
+  } else if(strategy==='max2stores' && activeIds.size){
+    const ids = Array.from(activeIds);
+    let best = null;
+    for(let i=0;i<ids.length;i++){
+      const r1 = totalCostForStoreSet(itemCands, new Set([ids[i]]));
+      if(!best || r1.unavailable<best.r.unavailable || (r1.unavailable===best.r.unavailable && r1.total<best.r.total)) best = { set:new Set([ids[i]]), r:r1 };
+      for(let j=i+1;j<ids.length;j++){
+        const pair = new Set([ids[i],ids[j]]);
+        const r = totalCostForStoreSet(itemCands, pair);
+        if(!best || r.unavailable<best.r.unavailable || (r.unavailable===best.r.unavailable && r.total<best.r.total)) best = { set:pair, r };
+      }
+    }
+    if(best) chosenStoreSet = best.set;
+  } else if(strategy==='balance' && activeIds.size){
+    // Prefer the single best store unless spreading across every active
+    // store saves more than a "is it worth another stop" threshold.
+    let bestSingle = null;
+    for(const sid of activeIds){
+      const r = totalCostForStoreSet(itemCands, new Set([sid]));
+      if(!bestSingle || r.unavailable<bestSingle.r.unavailable || (r.unavailable===bestSingle.r.unavailable && r.total<bestSingle.r.total)) bestSingle = { sid, r };
+    }
+    const allStores = totalCostForStoreSet(itemCands, activeIds);
+    const worthIt = bestSingle && (bestSingle.r.total - allStores.total) > 20 * Math.max(1, activeIds.size-1);
+    chosenStoreSet = worthIt ? activeIds : new Set([bestSingle.sid]);
+  }
+  // 'cheapest' strategy just uses activeIds unconstrained (set above).
+
+  const assignments = {};
+  const perStoreTotal = {};
+  let totalCost = 0, unavailableCount = 0;
+  for(const {item, candidates} of itemCands){
+    if(item.manualStoreOverride){
+      const locked = candidates.find(c=>c.storeId===item.manualStoreOverride) || { storeId:item.manualStoreOverride, price:item.estimatedPrice||0 };
+      assignments[item.id] = { storeId:locked.storeId, price:locked.price, locked:true, available:true };
+      totalCost += (locked.price||0)*item.quantity; perStoreTotal[locked.storeId] = (perStoreTotal[locked.storeId]||0)+(locked.price||0)*item.quantity;
+      continue;
+    }
+    const best = cheapestWithin(candidates, chosenStoreSet.size?chosenStoreSet:activeIds);
+    if(!best || best.price==null){
+      assignments[item.id] = { storeId:candidates[0]?.storeId||item.preferredStoreId||null, price:null, locked:false, available:false };
+      unavailableCount++;
+      continue;
+    }
+    assignments[item.id] = { storeId:best.storeId, price:best.price, locked:false, available:true };
+    totalCost += best.price*item.quantity; perStoreTotal[best.storeId] = (perStoreTotal[best.storeId]||0)+best.price*item.quantity;
+  }
+  return { assignments, perStoreTotal, totalCost, unavailableCount, storesUsed:Object.keys(perStoreTotal).length };
+}
+// "Billigast totalt (N butiker) vs. endast bästa enskilda butik" -- powers
+// the "besök N butiker och spara X kr" / "handla allt på Y" messaging.
+function compareSingleVsMulti(){
+  const priceIndex = buildProductPriceIndex();
+  const activeIds = activeListStoreIds();
+  if(!activeIds.size) return null;
+  const itemCands = listItems.map(item=>({ item, candidates:candidatesForItem(item, priceIndex) }));
+  const multi = totalCostForStoreSet(itemCands, activeIds);
+  let bestSingle = null;
+  for(const sid of activeIds){
+    const r = totalCostForStoreSet(itemCands, new Set([sid]));
+    if(!bestSingle || r.unavailable<bestSingle.r.unavailable || (r.unavailable===bestSingle.r.unavailable && r.total<bestSingle.r.total)) bestSingle = { storeId:sid, r };
+  }
+  if(!bestSingle) return null;
+  const storesUsedMulti = Object.keys(multi.perStore).length;
+  return {
+    multiTotal:multi.total, multiStores:storesUsedMulti, multiUnavailable:multi.unavailable,
+    singleTotal:bestSingle.r.total, singleStoreId:bestSingle.storeId, singleUnavailable:bestSingle.r.unavailable,
+    savings: bestSingle.r.total - multi.total,
+  };
 }
 async function loadWatchlist(){
   if(!household){ watchlist=[]; return; }
@@ -266,7 +499,7 @@ async function sendLoginLink(){
   authEmailSent = true; render();
   try{ await sbAuth.auth.signInWithOtp({ email: email.trim(), options:{ emailRedirectTo: window.location.href } }); }catch(e){ /* tyst */ }
 }
-async function signOut(){ await sbAuth.auth.signOut(); session=null; household=null; householdMembers=[]; householdInvites=[]; shoppingList=[]; watchlist=[]; render(); }
+async function signOut(){ await sbAuth.auth.signOut(); session=null; household=null; householdMembers=[]; householdInvites=[]; shoppingLists=[]; currentListId=null; listStores=[]; listItems=[]; watchlist=[]; render(); }
 async function inviteFamilyMember(){
   const el = document.getElementById('invite_email');
   const email = (el||{}).value||'';
@@ -537,7 +770,6 @@ function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
 
 // ── State ─────────────────────────────────────────────────
 let tab='erbjudanden', cat='Alla', sheet=null, mode='erbjudande';
-let shoppingList = [];
 let watchlist = [];
 let searchInput = '', searchResults = null, searchDone = false;
 
@@ -598,46 +830,50 @@ function scaleAmount(amount, unit, factor){
   if(scaled >= 1) return (Math.round(scaled*2)/2).toString();
   return (Math.round(scaled*4)/4).toString();
 }
-function inList(dealId){ return shoppingList.some(i=>i.dealId===dealId); }
+function inList(dealId){ return listItems.some(i=>i.dealId===dealId); }
 async function addOffer(id){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
-  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
+  if(!household || !currentListId){ showToast('⚠️ Kunde inte ladda din lista'); tab='lista'; render(); return; }
   const o = ALL_DEALS.find(d=>d.id===id); if(!o) return;
   if(inList(id)){ showToast('Redan på listan'); return; }
-  // A shopping_list row's id must be its OWN unique identifier, not the
-  // catalog deal's id -- deals are shared nationally, so reusing o.id here
-  // meant two different households adding the same popular deal collided on
-  // the primary key: RLS blocks the resulting cross-household UPDATE, the
-  // insert silently fails (swallowed by the catch below), and the item
-  // vanishes for the second household on next sync despite showing as
-  // "added" in their UI. dealId is kept separately so inList() can still
-  // detect "this deal is already on my list".
-  const rowId = Date.now() + Math.floor(Math.random()*100000);
-  const item = { id:rowId, dealId:o.id, store:o.store, product:o.product, detail:o.detail, price:o.price, origPrice:o.origPrice, unit:o.unit, category:o.category, emoji:o.emoji, checked:false, qty:1, isCustom:false };
-  shoppingList.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
-  try{ await supa.insert('shopping_list', { id:item.id, deal_id:o.id, household_id:household.id, added_by:session.user.id, store:item.store, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:item.unit, category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:false }); }catch(e){ /* tyst */ }
+  if(!listStores.some(s=>s.storeId===o.store)) await addListStore(o.store);
+  const itemId = crypto.randomUUID();
+  const item = { id:itemId, product:o.product, detail:o.detail, category:o.category, emoji:o.emoji, quantity:1, unit:o.unit,
+    dealId:o.id, preferredStoreId:o.store, recommendedStoreId:o.store, manualStoreOverride:null, estimatedPrice:o.price, checked:false, source:'offer' };
+  listItems.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
+  try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:item.detail, category:item.category, emoji:item.emoji,
+    quantity:1, unit:item.unit, deal_id:o.id, preferred_store_id:o.store, recommended_store_id:o.store, estimated_price:o.price, is_checked:false, source:'offer', added_by:session.user.id }); }catch(e){ /* tyst */ }
 }
 async function toggleItem(id){
-  const it = shoppingList.find(i=>i.id===id); if(!it) return;
+  const it = listItems.find(i=>i.id===id); if(!it) return;
   it.checked = !it.checked; markWrite(); render();
-  try{ await supa.update('shopping_list', id, { checked: it.checked }); }catch(e){ /* tyst */ }
+  try{ await supa.update('shopping_list_items', id, { is_checked: it.checked }); }catch(e){ /* tyst */ }
 }
 async function removeItem(id){
-  shoppingList = shoppingList.filter(i=>i.id!==id); markWrite(); render();
-  try{ await supa.delete('shopping_list', id); }catch(e){ /* tyst */ }
+  listItems = listItems.filter(i=>i.id!==id); markWrite(); render();
+  try{ await supa.delete('shopping_list_items', id); }catch(e){ /* tyst */ }
 }
+async function setManualStoreOverride(itemId, storeId){
+  const it = listItems.find(i=>i.id===itemId); if(!it) return;
+  it.manualStoreOverride = storeId || null; render();
+  try{ await supa.update('shopping_list_items', itemId, { manual_store_override: storeId || null }); }catch(e){ /* tyst */ }
+}
+function resetToRecommended(itemId){ setManualStoreOverride(itemId, null); }
 async function submitCustom(){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); sheet=null; tab='lista'; render(); return; }
-  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); sheet=null; tab='lista'; render(); return; }
+  if(!household || !currentListId){ showToast('⚠️ Kunde inte ladda din lista'); sheet=null; tab='lista'; render(); return; }
   const name=(document.getElementById('f_name')||{}).value||'';
   if(!name.trim()) return;
-  const store=(document.getElementById('f_store')||{}).value||'ovrigt';
+  const storeSel=(document.getElementById('f_store')||{}).value||'ovrigt';
+  const preferredStoreId = storeSel==='ovrigt' ? null : storeSel;
   const c=(document.getElementById('f_cat')||{}).value||'Mejeri & Övrigt';
   const qty=Math.max(1, parseInt((document.getElementById('f_qty')||{}).value||'1')||1);
-  const id = Date.now();
-  const item = { id, store, product:name.trim(), detail:'', price:0, origPrice:0, unit:'', category:c, emoji:CAT_EMOJI[c]||'🛒', checked:false, qty, isCustom:true };
-  shoppingList.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
-  try{ await supa.insert('shopping_list', { id, household_id:household.id, added_by:session.user.id, store, product:item.product, detail:'', price:0, orig_price:0, unit:'', category:c, emoji:item.emoji, checked:false, qty, is_custom:true }); }catch(e){ /* tyst */ }
+  const itemId = crypto.randomUUID();
+  const item = { id:itemId, product:name.trim(), detail:'', category:c, emoji:CAT_EMOJI[c]||'🛒', quantity:qty, unit:'',
+    dealId:null, preferredStoreId, recommendedStoreId:preferredStoreId, manualStoreOverride:null, estimatedPrice:null, checked:false, source:'manual' };
+  listItems.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
+  try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:'', category:c, emoji:item.emoji,
+    quantity:qty, unit:'', preferred_store_id:preferredStoreId, is_checked:false, source:'manual', added_by:session.user.id }); }catch(e){ /* tyst */ }
 }
 async function submitOffer(){
   const name=(document.getElementById('f_name')||{}).value||'';
@@ -659,7 +895,7 @@ const PAGE='max-width:1080px;margin:0 auto;padding:clamp(16px,4vw,28px);';
 
 function navBtn(key,label){
   const active = tab===key;
-  const badge = key==='lista'&&shoppingList.length ? ' · '+shoppingList.length : '';
+  const badge = key==='lista'&&listItems.length ? ' · '+listItems.length : '';
   return `<button onclick="go('${key}')" style="flex:none;padding:10px 14px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
 }
 function areaSwitcher(){
@@ -1071,41 +1307,127 @@ function viewList(){
   </div>`;
   const hh = householdPanel();
 
-  if(!shoppingList.length){
-    return hh + searchBox + `<div style="text-align:center;padding:40px 20px;">
+  if(!currentListId){
+    return hh + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Laddar…</div>`;
+  }
+
+  // ── Listväxlare ───────────────────────────────────────────
+  const listTabs = shoppingLists.map(l=>{
+    const active = l.id===currentListId;
+    return `<button onclick="switchShoppingList('${l.id}')" style="flex:none;padding:9px 14px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${esc(l.name)}</button>`;
+  }).join('');
+  const listSwitcher = `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;align-items:center;">
+    ${listTabs}
+    <input id="new_list_name" placeholder="Ny lista…" style="flex:none;width:120px;padding:9px 10px;border-radius:12px;border:1px solid #EFE6D8;font-size:12.5px;font-family:${FAM};outline:none;" onkeydown="if(event.key==='Enter')addShoppingList()">
+    <button onclick="addShoppingList()" style="flex:none;width:36px;height:36px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;font-size:16px;cursor:pointer;">+</button>
+    ${shoppingLists.length>1?`<button onclick="deleteShoppingList('${currentListId}')" title="Ta bort listan" style="flex:none;width:36px;height:36px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;color:#B6A893;font-size:14px;cursor:pointer;">✕</button>`:''}
+  </div>`;
+
+  // ── Aktiva butiker ────────────────────────────────────────
+  const candidateStores = Array.from(new Set([...followedStoreIds, ...listStores.map(s=>s.storeId)])).map(id=>storeById(id)).filter(s=>s && s.id);
+  const storeChips = candidateStores.map(s=>{
+    const active = isStoreActiveOnList(s.id);
+    return `<button onclick="toggleListStore('${s.id}')" style="flex:none;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#B6A893'};font-weight:700;font-size:12.5px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${active?'✓':''} ${esc(s.name)}</button>`;
+  }).join('');
+  const otherFollowable = ALL_STORES.filter(s=>followedStoreIds.has(s.id) && !listStores.some(ls=>ls.storeId===s.id));
+  const addStoreSelect = STORES.length ? `<select onchange="if(this.value){addListStore(this.value); this.value='';}" style="flex:none;padding:8px 10px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;font-size:12.5px;font-family:${FAM};color:#6A5E50;">
+      <option value="">+ Lägg till butik…</option>
+      ${STORES.filter(s=>!listStores.some(ls=>ls.storeId===s.id)).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+    </select>` : '';
+  const storeBar = `<div style="margin-bottom:14px;">
+    <div style="font-size:12px;font-weight:700;color:#8A7E6E;margin-bottom:8px;">Handla från:</div>
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;">${storeChips}${addStoreSelect}</div>
+  </div>`;
+
+  if(!listItems.length){
+    return hh + listSwitcher + storeBar + searchBox + `<div style="text-align:center;padding:40px 20px;">
       <div style="font-size:54px;">🧺</div>
       <div style="font-family:${DISP};font-weight:700;font-size:20px;margin-top:12px;">Listan är tom</div>
       <div style="font-size:14px;color:#8A7E6E;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;">Lägg till fynd härifrån eller bläddra bland erbjudandena.</div>
       <button onclick="go('erbjudanden')" style="margin-top:18px;padding:11px 20px;border:none;border-radius:13px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bläddra bland fynd</button>
     </div>`;
   }
-  const totalPrice = shoppingList.reduce((a,i)=>a+(i.isCustom?0:i.price*i.qty),0);
-  const totalSaved = shoppingList.reduce((a,i)=>a+(i.isCustom?0:Math.max(0,(i.origPrice||0)-i.price)*i.qty),0);
-  const order=[], gmap={};
-  shoppingList.forEach(i=>{ if(!gmap[i.store]){ const st=storeById(i.store); gmap[i.store]={name:st.name,color:st.color,logoUrl:st.logoUrl,items:[]}; order.push(i.store);} gmap[i.store].items.push(i); });
-  const groups = order.map(k=>{ const g=gmap[k];
-    const rows = g.items.map(i=>{
-      const lineSave=Math.max(0,(i.origPrice||0)-i.price)*i.qty;
-      const meta=(i.qty>1?i.qty+' st · ':'')+(i.isCustom?'egen vara':((i.origPrice>i.price)?('ord. '+kr(i.origPrice)+' · spar '+kr(lineSave)):(i.detail||i.unit||'')));
-      const priceStr=i.isCustom?'—':kr(i.price*i.qty);
-      const checkStyle=`width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;font-weight:800;color:#fff;background:${i.checked?'#4F7A3F':'#fff'};border:${i.checked?'1px solid #4F7A3F':'2px solid #E0D5C2'};`;
-      const nameStyle=`font-weight:700;font-size:14.5px;color:${i.checked?'#B6A893':'#2A211A'};text-decoration:${i.checked?'line-through':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
-      return `<div style="display:flex;align-items:center;gap:12px;padding:11px 12px;">
-        <button onclick="toggleItem(${i.id})" style="${checkStyle}">${i.checked?'✓':''}</button>
-        <div style="flex:1;min-width:0;"><div style="${nameStyle}">${esc(i.product)}</div><div style="font-size:12px;color:#8A7E6E;margin-top:1px;">${esc(meta)}</div></div>
+
+  const strategy = (shoppingLists.find(l=>l.id===currentListId)||{}).strategy || 'cheapest';
+  const opt = computeListOptimization();
+  const scenario = compareSingleVsMulti();
+
+  const strategyLabels = { cheapest:'Billigast möjligt', max2stores:'Max 2 butiker', single_store:'Helst 1 butik', balance:'Balansera pris och tid' };
+  const strategyRow = `<div style="margin-bottom:14px;">
+    <select onchange="setListStrategy(this.value)" style="padding:9px 12px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;font-size:13px;font-weight:700;font-family:${FAM};color:#2A211A;">
+      ${Object.entries(strategyLabels).map(([v,l])=>`<option value="${v}" ${strategy===v?'selected':''}>${l}</option>`).join('')}
+    </select>
+  </div>`;
+
+  const scenarioBanner = (scenario && scenario.multiStores>1 && scenario.savings>0.5) ? `<div style="background:#EAF1E3;border:1px solid #CFE0C2;border-radius:16px;padding:14px 16px;margin-bottom:14px;">
+      <div style="font-weight:700;font-size:13.5px;color:#3E6632;">💡 Besök ${scenario.multiStores} butiker och spara ${kr(scenario.savings)} <span style="opacity:.7;">(vs. handla allt på ${esc(storeById(scenario.singleStoreId).name)} för ${kr(scenario.singleTotal)})</span></div>
+    </div>` : (scenario && scenario.multiStores>1 ? `<div style="background:#FBF0DE;border:1px solid #EFD9AC;border-radius:16px;padding:14px 16px;margin-bottom:14px;">
+      <div style="font-weight:700;font-size:13.5px;color:#8A5A2B;">Du sparar bara ${kr(Math.max(0,scenario.savings))} genom att besöka ${scenario.multiStores} butiker i stället för att handla allt på ${esc(storeById(scenario.singleStoreId).name)}.</div>
+    </div>` : '');
+
+  const viewTabs = `<div style="display:flex;gap:8px;margin-bottom:14px;">
+    ${['alla','perbutik','billigast'].map(v=>{
+      const active = listView===v;
+      const label = v==='alla'?'Alla varor':v==='perbutik'?'Per butik':'Billigast';
+      return `<button onclick="setListView('${v}')" style="flex:1;padding:10px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};">${label}</button>`;
+    }).join('')}
+  </div>`;
+
+  function itemRow(item, assignment){
+    const checkStyle=`width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;font-weight:800;color:#fff;background:${item.checked?'#4F7A3F':'#fff'};border:${item.checked?'1px solid #4F7A3F':'2px solid #E0D5C2'};`;
+    const nameStyle=`font-weight:700;font-size:14.5px;color:${item.checked?'#B6A893':'#2A211A'};text-decoration:${item.checked?'line-through':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+    const storeName = assignment.storeId ? esc(storeById(assignment.storeId).name) : (assignment.available===false ? 'inget pris hittat' : '');
+    const priceStr = assignment.price!=null ? kr(assignment.price*item.quantity) : '—';
+    const meta = [(item.quantity>1?item.quantity+' st':''), (item.detail||''), storeName].filter(Boolean).join(' · ');
+    const candidateOptions = candidatesForItem(item, buildProductPriceIndex())
+      .filter((c,idx,arr)=>arr.findIndex(x=>x.storeId===c.storeId)===idx)
+      .map(c=>`<option value="${c.storeId}" ${item.manualStoreOverride===c.storeId?'selected':''}>${esc(storeById(c.storeId).name)}${c.price!=null?' · '+kr(c.price):''}</option>`).join('');
+    const switcher = candidateOptions ? `<select onchange="setManualStoreOverride('${item.id}', this.value)" style="flex:none;max-width:118px;padding:5px 6px;border-radius:8px;border:1px solid #EFE6D8;background:#fff;font-size:11px;font-family:${FAM};color:#6A5E50;">
+        <option value="">Byt butik…</option>${candidateOptions}
+      </select>` : '';
+    const resetBtn = item.manualStoreOverride ? `<button onclick="resetToRecommended('${item.id}')" title="Återställ till rekommenderad butik" style="flex:none;border:none;background:none;color:#8A5A2B;font-size:11px;font-weight:700;cursor:pointer;">↺</button>` : '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;flex-wrap:wrap;">
+        <button onclick="toggleItem('${item.id}')" style="${checkStyle}">${item.checked?'✓':''}</button>
+        <div style="flex:1;min-width:120px;"><div style="${nameStyle}">${esc(item.product)}</div><div style="font-size:11.5px;color:#8A7E6E;margin-top:1px;">${esc(meta)}</div></div>
+        ${switcher}${resetBtn}
         <span style="font-weight:800;font-size:14px;font-family:${DISP};color:#2A211A;">${priceStr}</span>
-        <button onclick="removeItem(${i.id})" style="width:28px;height:28px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:13px;cursor:pointer;flex:none;">✕</button>
+        <button onclick="removeItem('${item.id}')" style="width:26px;height:26px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:12px;cursor:pointer;flex:none;">✕</button>
+      </div>`;
+  }
+
+  let body;
+  if(listView==='alla'){
+    const rows = listItems.map(item=>itemRow(item, opt.assignments[item.id]||{})).join('');
+    body = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>`;
+  } else {
+    const useOpt = listView==='billigast' ? computeListOptimization('cheapest') : opt;
+    const order=[], gmap={};
+    listItems.forEach(item=>{
+      const a = useOpt.assignments[item.id]||{};
+      const key = a.storeId || '_';
+      if(!gmap[key]){ gmap[key] = { store: a.storeId?storeById(a.storeId):null, items:[], total:0 }; order.push(key); }
+      gmap[key].items.push({item,a}); gmap[key].total += (a.price||0)*item.quantity;
+    });
+    body = order.map(k=>{
+      const g = gmap[k];
+      const rows = g.items.map(({item,a})=>itemRow(item,a)).join('');
+      const heading = g.store ? esc(g.store.name) : 'Butik saknas / inget pris';
+      return `<div style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+          <span style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#8A7E6E;">${heading}</span>
+          <span style="font-weight:800;font-size:13px;color:#2A211A;">${kr(g.total)}</span>
+        </div>
+        <div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>
       </div>`;
     }).join('');
-    return `<div style="margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">${storeLogo(g,20,6)}<span style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#8A7E6E;">${esc(g.name)}</span></div>
-      <div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:6px 4px;box-shadow:0 2px 10px rgba(42,33,26,.04);">${rows}</div>
+  }
+
+  const summary = `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
+      <div style="flex:1;"><div style="font-size:12.5px;opacity:.65;">${listItems.length} varor · ${opt.storesUsed} ${opt.storesUsed===1?'butik':'butiker'}</div><div style="font-family:${DISP};font-weight:800;font-size:32px;line-height:1;margin-top:4px;">${kr(opt.totalCost)}</div></div>
+      ${opt.unavailableCount?`<div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Utan pris</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#EFC97E;margin-top:3px;">${opt.unavailableCount}</div></div>`:''}
     </div>`;
-  }).join('');
-  return hh + searchBox + `<div style="background:#2A211A;color:#fff;border-radius:20px;padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:18px;box-shadow:0 10px 24px rgba(42,33,26,.22);">
-      <div style="flex:1;"><div style="font-size:12.5px;opacity:.65;">${shoppingList.length} varor att handla</div><div style="font-family:${DISP};font-weight:800;font-size:32px;line-height:1;margin-top:4px;">${kr(totalPrice)}</div></div>
-      <div style="text-align:right;"><div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.04em;">Du sparar</div><div style="font-family:${DISP};font-weight:800;font-size:22px;color:#9FD27E;margin-top:3px;">-${kr(totalSaved)}</div></div>
-    </div>${groups}`;
+
+  return hh + listSwitcher + storeBar + searchBox + strategyRow + scenarioBanner + summary + viewTabs + body;
 }
 function renderSearchResults(){
   if(!searchResults || !searchResults.length) return '';
@@ -1288,28 +1610,37 @@ function swapMenuRecipe(idx){
 }
 async function addMenuToShoppingList(){
   if(!session){ showToast('🔐 Logga in för att lägga till på listan'); tab='lista'; render(); return; }
-  if(!household){ showToast('⚠️ Kunde inte ladda ditt hushåll'); tab='lista'; render(); return; }
+  if(!household || !currentListId){ showToast('⚠️ Kunde inte ladda din lista'); tab='lista'; render(); return; }
   if(!weeklyMenu || !weeklyMenu.length) return;
+  // Merge by exact ingredient NAME text -- this is deliberately what keeps
+  // genuinely different products from ever merging (vispgrädde vs.
+  // matlagningsgrädde are different strings, so they never collide) while
+  // still combining the same real ingredient across recipes (500g kyckling +
+  // 700g kyckling -> one merged line).
   const merged = {};
   for(const r of weeklyMenu){
     for(const ing of (r.ingredients||[])){
       const key = (ing.name||'').toLowerCase();
       if(!key) continue;
-      if(!merged[key]) merged[key] = { name: ing.name, parts: [], price: null, store: null, fromDealId: null };
+      if(!merged[key]) merged[key] = { name: ing.name, parts: [], price: null, dealId: null, store: null };
       const scaledAmt = scaleAmount(ing.amount, ing.unit, householdSize/(r.servings||4));
       merged[key].parts.push(`${scaledAmt||''} ${ing.unit||''}`.trim());
-      if(ing.fromDealId && merged[key].fromDealId==null){ merged[key].fromDealId = ing.fromDealId; merged[key].price = ing.price; merged[key].store = ing.store; }
+      if(ing.fromDealId && merged[key].dealId==null){ merged[key].dealId = ing.fromDealId; merged[key].price = ing.price; merged[key].store = ing.store; }
     }
   }
   let addedCount = 0;
   for(const key in merged){
     const m = merged[key];
-    const id = Date.now() + Math.floor(Math.random()*100000);
-    const isCustom = m.fromDealId == null;
-    const st = m.store || 'ovrigt';
-    const item = { id, dealId: m.fromDealId, store: st, product: m.name, detail: m.parts.filter(Boolean).join(' + '), price: m.price||0, origPrice: m.price||0, unit: 'st', category: 'Skafferivaror', emoji: '🛒', checked:false, qty:1, isCustom };
-    shoppingList.push(item); addedCount++;
-    try{ await supa.insert('shopping_list', { id, deal_id: m.fromDealId, household_id:household.id, added_by:session.user.id, store:st, product:item.product, detail:item.detail, price:item.price, orig_price:item.origPrice, unit:'st', category:item.category, emoji:item.emoji, checked:false, qty:1, is_custom:isCustom }); }catch(e){}
+    if(inList(m.dealId) && m.dealId!=null) continue;
+    if(!m.dealId && listItems.some(it=>it.product.toLowerCase()===key)) continue;
+    const itemId = crypto.randomUUID();
+    const detail = m.parts.filter(Boolean).join(' + ');
+    if(m.store && !listStores.some(s=>s.storeId===m.store)) await addListStore(m.store);
+    const item = { id:itemId, product:m.name, detail, category:'Skafferivaror', emoji:'🛒', quantity:1, unit:'st',
+      dealId:m.dealId, preferredStoreId:m.store, recommendedStoreId:m.store, manualStoreOverride:null, estimatedPrice:m.price, checked:false, source:'recipe' };
+    listItems.push(item); addedCount++;
+    try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail, category:'Skafferivaror', emoji:'🛒',
+      quantity:1, unit:'st', deal_id:m.dealId, preferred_store_id:m.store, recommended_store_id:m.store, estimated_price:m.price, is_checked:false, source:'recipe', added_by:session.user.id }); }catch(e){}
   }
   markWrite(); tab='lista'; showToast(`✓ ${addedCount} varor tillagda från veckomenyn`); render();
 }
