@@ -639,6 +639,14 @@ let ALL_STORES = [];
 let deals = [];
 let ALL_DEALS = [];
 let LINK_BY_KEY = new Map();
+// National, lightweight (no deals/links attached) -- used for postnummer/ort
+// search, cross-city follow bookkeeping, and anything else that needs to
+// find/name a store regardless of which city's deal data is currently
+// loaded. ALL_STORES/ALL_DEALS below stay scoped to the current CITY (plus
+// any followed out-of-city stores) so the actual heavy payload -- deals,
+// product_store_links -- never balloons to "every store in Sweden" just
+// because the fleet keeps growing. See loadStoreDirectory()/loadCityData().
+let STORE_DIRECTORY = [];
 let catalogLoading = true, catalogError = null;
 let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
 let vfMap = null, vfMapMarkers = {}, vfMapResizeObserver = null;
@@ -662,13 +670,17 @@ function recomputeScope(){
   // whole view, with zero visible explanation beyond a small "Rensa valda
   // butiker" button buried in the Butiker tab. Self-heal HERE (every time
   // scope is recomputed, not only inside switchCity()) so it's fixed
-  // regardless of how the mismatch arose. Guarded on AREAS/ALL_STORES
-  // actually being loaded, so an early call before the catalog has landed
-  // can't wipe a legitimate follow just because there's nothing to check
-  // it against yet.
-  if(followedStoreIds.size && AREAS.length && ALL_STORES.length){
+  // regardless of how the mismatch arose. Uses STORE_DIRECTORY (national,
+  // always fully loaded independent of which city's deal data is currently
+  // scoped) rather than ALL_STORES -- ALL_STORES only holds the current
+  // city's + followed stores' data now, so it can't reliably answer "is
+  // this followed store even IN a different city" the way the always-
+  // complete directory can. Guarded on AREAS/STORE_DIRECTORY actually being
+  // loaded, so an early call before the catalog has landed can't wipe a
+  // legitimate follow just because there's nothing to check it against yet.
+  if(followedStoreIds.size && AREAS.length && STORE_DIRECTORY.length){
     const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
-    const inCity = new Set(ALL_STORES.filter(s=>followedStoreIds.has(s.id) && areaCity.get(s.areaId)===currentCityId).map(s=>s.id));
+    const inCity = new Set(STORE_DIRECTORY.filter(s=>followedStoreIds.has(s.id) && areaCity.get(s.areaId)===currentCityId).map(s=>s.id));
     if(inCity.size !== followedStoreIds.size){ followedStoreIds = inCity; saveFollowed(); }
   }
   if(followedStoreIds.size){
@@ -728,13 +740,31 @@ async function loadAreas(){
     if(Array.isArray(cityRows)) CITIES = cityRows;
     const rows = await supa.selectRaw('areas?select=*&order=name.asc');
     if(Array.isArray(rows)) AREAS = rows;
+    const isFirstVisit = !currentCityId;
     if(!currentCityId && CITIES.length){ currentCityId = CITIES[0].id; currentCityName = CITIES[0].name; }
     else if(currentCityId){ const c = CITIES.find(x=>x.id===currentCityId); if(c) currentCityName = c.name; }
     const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
     if((!currentAreaId || !areasInCity.some(a=>a.id===currentAreaId)) && areasInCity.length){
       currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
     } else if(currentAreaId){ const a = AREAS.find(x=>x.id===currentAreaId); if(a) currentAreaName = a.name; }
+    // Postnummer-first onboarding: a genuinely new visitor (no persisted
+    // city yet) still gets a sane default city/area so the rest of the app
+    // works, but lands on the postnummer/ort search instead of silently
+    // being dropped into an alphabetically-first city they may have nothing
+    // to do with.
+    if(isFirstVisit) tab = 'butiker';
   }catch(e){ /* offline */ }
+}
+// National, lightweight store list (no deals/links) for postnummer/ort
+// search and cross-city follow bookkeeping -- see STORE_DIRECTORY comment.
+// Independent of the city-scoped deal load below; a store's basic identity
+// (name/address/lat/lng) should be findable regardless of which city's
+// deals happen to be loaded right now.
+async function loadStoreDirectory(){
+  try{
+    const rows = await supa.selectRaw(`stores?select=${STORE_COLS}&active=eq.true&order=name.asc`);
+    STORE_DIRECTORY = Array.isArray(rows) ? rows.map(mapStoreRow) : [];
+  }catch(e){ /* search just won't find anything until a retry */ }
 }
 // Most chains only put brand/image on a minority of their own deals -- if
 // match-products has already linked this deal's raw text to a canonical
@@ -793,37 +823,55 @@ async function loadScopedFirst(){
   fillSharedBrandImageOrigin(ALL_DEALS, LINK_BY_KEY, productRows);
   recomputeScope();
 }
-async function loadFullCatalogInBackground(){
+// Niklas's postnummer-first-loading spec: "appen [ska] inte ladda alla
+// butiker i ett län eller en större region till klienten". This used to
+// fetch EVERY active store nationally (deals + product_store_links included)
+// into the background regardless of which city the user was even in -- a
+// user browsing Umeå was silently downloading all of Stockholm's ~400
+// stores' deals too, and that payload only grows as the fleet expands.
+// Rescoped to the user's CURRENT CITY (all its areas) plus any followed
+// stores outside it -- still enough to make area-switching within a city
+// instant and cross-city follows work, but a Stockholm-sized city's data is
+// never downloaded by someone who only cares about Umeå or Östersund.
+// STORE_DIRECTORY (loadStoreDirectory) stays genuinely national, but it's
+// lightweight -- no deals/links, just enough to search/name/map a store.
+async function loadCityDataInBackground(){
   try{
-    const allRows = await supa.selectRaw(`stores?select=${STORE_COLS}&active=eq.true&order=name.asc`);
-    const allStores = Array.isArray(allRows) ? allRows.map(mapStoreRow) : [];
-    const allIds = allStores.map(s=>s.id);
-    let allDeals = [], linkByKey = new Map();
-    if(allIds.length){
+    const areaIdsInCity = AREAS.filter(a=>a.city_id===currentCityId).map(a=>a.id);
+    const filters = [];
+    if(areaIdsInCity.length) filters.push(`area_id.in.(${areaIdsInCity.join(',')})`);
+    if(followedStoreIds.size) filters.push(`id.in.(${Array.from(followedStoreIds).join(',')})`);
+    if(!filters.length) return;
+    const rows = await supa.selectRaw(`stores?select=${STORE_COLS}&active=eq.true&or=(${filters.join(',')})&order=name.asc`);
+    const cityStores = Array.isArray(rows) ? rows.map(mapStoreRow) : [];
+    const cityIds = cityStores.map(s=>s.id);
+    let cityDeals = [], linkByKey = new Map();
+    if(cityIds.length){
       const todayStr = new Date().toISOString().slice(0,10);
       const [dealRows, linkRows, productRows] = await Promise.all([
-        supa.fetchAllDeals(allIds.join(','), todayStr),
-        supa.fetchAllProductLinks(allIds.join(',')),
+        supa.fetchAllDeals(cityIds.join(','), todayStr),
+        supa.fetchAllProductLinks(cityIds.join(',')),
         supa.fetchAllProducts(),
       ]);
-      allDeals = dealRows.map(mapDealRow);
+      cityDeals = dealRows.map(mapDealRow);
       linkByKey = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
-      fillSharedBrandImageOrigin(allDeals, linkByKey, productRows);
+      fillSharedBrandImageOrigin(cityDeals, linkByKey, productRows);
     }
-    ALL_STORES = allStores; ALL_DEALS = allDeals; LINK_BY_KEY = linkByKey;
+    ALL_STORES = cityStores; ALL_DEALS = cityDeals; LINK_BY_KEY = linkByKey;
     recomputeScope(); render();
-  }catch(e){ /* first-paint data is already showing; the next app open retries */ }
+  }catch(e){ /* first-paint data is already showing; the next app open/switch retries */ }
 }
 async function loadCatalog(){
   catalogLoading = true; catalogError = null; render();
+  loadStoreDirectory(); // national but lightweight -- fire-and-forget, doesn't block first paint
   try{
     await loadAreas();
     await loadScopedFirst();
   }catch(e){ catalogError = 'Kunde inte hämta erbjudanden.'; }
   catalogLoading = false; render();
-  if(!catalogError) loadFullCatalogInBackground();
+  if(!catalogError) loadCityDataInBackground();
 }
-function switchCity(id){
+async function switchCity(id){
   const c = CITIES.find(x=>x.id===id); if(!c) return;
   currentCityId = c.id; currentCityName = c.name;
   localStorage.setItem('vf_city_id', c.id); localStorage.setItem('vf_city_name', c.name);
@@ -835,7 +883,13 @@ function switchCity(id){
     currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
     localStorage.setItem('vf_area_id', currentAreaId); localStorage.setItem('vf_area_name', currentAreaName);
   }
-  recomputeScope(); render();
+  // The previous city's deal data is no longer relevant scope -- clear it so
+  // recomputeScope() shows an honest "laddar" state instead of a stale
+  // previous city's offers while the new city's data is fetched.
+  ALL_STORES = []; ALL_DEALS = []; LINK_BY_KEY = new Map();
+  catalogLoading = true; recomputeScope(); render();
+  await loadCityDataInBackground();
+  catalogLoading = false; render();
 }
 function switchArea(id){
   const a = AREAS.find(x=>x.id===id); if(!a) return;
@@ -869,7 +923,7 @@ const CAT_BG = {
 const CAT_ORDER = ['Frukt & Grönt','Kött & Chark','Mejeri','Bröd, kex & bageri','Skafferivaror','Djupfryst','Hem & fritid','Hälsa & skönhet'];
 const CAT_EMOJI = {'Frukt & Grönt':'🥬','Kött & Chark':'🥩','Mejeri':'🥛','Bröd, kex & bageri':'🍞','Skafferivaror':'🥫','Djupfryst':'🧊','Hem & fritid':'🧴','Hälsa & skönhet':'💊'};
 const FALLBACK_STORE = { name:'Övrigt', color:'#B6A893', distance:'' };
-function storeById(id){ return STORES.find(s=>s.id===id) || ALL_STORES.find(s=>s.id===id) || FALLBACK_STORE; }
+function storeById(id){ return STORES.find(s=>s.id===id) || ALL_STORES.find(s=>s.id===id) || STORE_DIRECTORY.find(s=>s.id===id) || FALLBACK_STORE; }
 function storeLogo(st, size, radius){
   radius = radius || Math.round(size*0.3);
   const fallback = `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:${st.color};color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:${Math.round(size*0.42)}px;flex:none;">${esc((st.name||'?')[0])}</div>`;
@@ -1212,7 +1266,10 @@ async function geocodeLocation(query){
 function computeStoreSearchResults(){
   if(!storeSearchOrigin) return;
   const { lat, lng } = storeSearchOrigin;
-  storeSearchResults = ALL_STORES
+  // Nationwide by design (STORE_DIRECTORY, not ALL_STORES) -- the whole
+  // point of postnummer/ort search is finding stores regardless of which
+  // city's deal data happens to be loaded right now.
+  storeSearchResults = STORE_DIRECTORY
     .filter(st=>st.lat!=null && st.lng!=null)
     .map(st=>({ st, dist: distanceKm(lat, lng, st.lat, st.lng) }))
     .sort((a,b)=>a.dist-b.dist)
@@ -1251,6 +1308,24 @@ function useMyLocation(){
 function clearStoreSearch(){
   storeSearchInput=''; storeSearchOrigin=null; storeSearchResults=null; storeSearchError=null; render();
 }
+// Postnummer-first onboarding: lets a search (the first thing a new visitor
+// sees, see loadAreas()) become the actual starting point instead of only
+// being a way to follow individual stores one at a time. Sets the nearest
+// result's own area/city as "home" and jumps straight to Erbjudanden --
+// still just as easy to search elsewhere or expand later via the existing
+// Butiker search box, nothing about this choice is locked in.
+async function setMyAreaFromSearch(){
+  if(!storeSearchResults || !storeSearchResults.length) return;
+  const nearest = storeSearchResults[0].st;
+  const area = AREAS.find(a=>a.id===nearest.areaId);
+  if(!area) return;
+  if(area.city_id !== currentCityId) await switchCity(area.city_id);
+  currentAreaId = area.id; currentAreaName = area.name;
+  localStorage.setItem('vf_area_id', area.id); localStorage.setItem('vf_area_name', area.name);
+  clearStoreSearch();
+  tab = 'erbjudanden';
+  recomputeScope(); render();
+}
 function storeSearchBox(){
   return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px;margin-bottom:16px;">
     <div style="font-weight:800;font-family:${DISP};font-size:14px;margin-bottom:8px;">📍 Sök butiker nära dig</div>
@@ -1276,8 +1351,8 @@ function storeCard(st, count, save, top, followed, distKm){
           <div style="font-size:12.5px;color:#8A7E6E;">📍 ${esc(distLabel)}</div>
         </div>
         <div style="text-align:right;flex:none;">
-          <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count}</div>
-          <div style="font-size:10.5px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.04em;">fynd</div>
+          <div style="font-family:${DISP};font-weight:800;font-size:20px;color:#4F7A3F;">${count!=null?count:'—'}</div>
+          <div style="font-size:10.5px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.04em;">${count!=null?'fynd':'okänt'}</div>
         </div>
       </div>
       ${count?`<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #E6DBC9;display:flex;flex-direction:column;gap:9px;">${top}</div>`:''}
@@ -1308,11 +1383,19 @@ function viewStores(){
   const searchBox = storeSearchBox();
   if(storeSearchResults){
     const originLabel = storeSearchOrigin && storeSearchOrigin.label ? storeSearchOrigin.label.split(',')[0] : storeSearchInput;
+    // Search is nationwide (STORE_DIRECTORY) but deal data is only loaded for
+    // the current city + followed stores -- a search result outside that
+    // scope genuinely has unknown deal counts until followed, not zero.
+    // Distinguish "loaded and empty" from "not loaded yet" so the card
+    // never claims a store has no offers when it just hasn't been fetched.
+    const dealsLoadedFor = new Set(ALL_STORES.map(s=>s.id));
     const cards = storeSearchResults.map(({st,dist})=>{
       const {count,save,top} = storeCardData(st, byStoreDeals.get(st.id)||[]);
-      return storeCard(st,count,save,top,followedStoreIds.has(st.id),dist);
+      return storeCard(st, dealsLoadedFor.has(st.id)?count:null, save, top, followedStoreIds.has(st.id), dist);
     }).join('');
-    return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${storeSearchResults.length} butiker nära ${esc(originLabel)}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Sorterat efter avstånd — klicka "Följ" för att se erbjudanden härifrån i Erbjudanden-fliken, oavsett vilket område de ligger i.</div></div>
+    return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${storeSearchResults.length} butiker nära ${esc(originLabel)}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Sorterat efter avstånd — klicka "Följ" för att se erbjudanden härifrån i Erbjudanden-fliken, oavsett vilket område de ligger i.</div>
+      <button onclick="setMyAreaFromSearch()" style="margin-top:10px;padding:10px 16px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">📍 Använd ${esc(originLabel.split(' ')[0])} som mitt område</button>
+    </div>
       ${searchBox}
       <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;">${cards || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga butiker hittades i närheten.</div>`}</div>`;
