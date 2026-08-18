@@ -308,6 +308,25 @@ function mapStoreRow(r){
 }
 function saveFollowed(){ localStorage.setItem('vf_followed_stores', JSON.stringify(Array.from(followedStoreIds))); }
 function recomputeScope(){
+  // A follow persists in localStorage across sessions/devices, and it wins
+  // the STORES computation below unconditionally. If the user's city has
+  // since diverged from where a followed store lives -- via an explicit
+  // switchCity(), OR just because the page loaded straight into a
+  // localStorage-persisted city from a PRIOR session while an old follow
+  // from a different city was still sitting in vf_followed_stores -- that
+  // stale follow silently and permanently overrides the current city's
+  // whole view, with zero visible explanation beyond a small "Rensa valda
+  // butiker" button buried in the Butiker tab. Self-heal HERE (every time
+  // scope is recomputed, not only inside switchCity()) so it's fixed
+  // regardless of how the mismatch arose. Guarded on AREAS/ALL_STORES
+  // actually being loaded, so an early call before the catalog has landed
+  // can't wipe a legitimate follow just because there's nothing to check
+  // it against yet.
+  if(followedStoreIds.size && AREAS.length && ALL_STORES.length){
+    const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
+    const inCity = new Set(ALL_STORES.filter(s=>followedStoreIds.has(s.id) && areaCity.get(s.areaId)===currentCityId).map(s=>s.id));
+    if(inCity.size !== followedStoreIds.size){ followedStoreIds = inCity; saveFollowed(); }
+  }
   if(followedStoreIds.size){
     STORES = ALL_STORES.filter(s=>followedStoreIds.has(s.id));
   } else if(currentAreaId){
@@ -461,16 +480,9 @@ function switchCity(id){
   const c = CITIES.find(x=>x.id===id); if(!c) return;
   currentCityId = c.id; currentCityName = c.name;
   localStorage.setItem('vf_city_id', c.id); localStorage.setItem('vf_city_name', c.name);
-  // followedStoreIds otherwise wins recomputeScope() unconditionally (line ~229),
-  // so a store followed in one city silently keeps showing after switching to a
-  // totally different city -- drop any follow that isn't in the new city; a
-  // follow in a different AREA of the SAME city is still kept (that's the
-  // actual intended use of following an out-of-area-but-nearby store).
-  if(followedStoreIds.size){
-    const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
-    const keep = new Set(ALL_STORES.filter(st=>followedStoreIds.has(st.id) && areaCity.get(st.areaId)===id).map(st=>st.id));
-    if(keep.size !== followedStoreIds.size){ followedStoreIds = keep; saveFollowed(); }
-  }
+  // Cross-city follow pruning now happens inside recomputeScope() itself
+  // (self-heals on every scope computation, not just an explicit city
+  // switch) -- see the comment there for why that's necessary.
   const areasInCity = AREAS.filter(a=>a.city_id===id);
   if(areasInCity.length){
     currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
