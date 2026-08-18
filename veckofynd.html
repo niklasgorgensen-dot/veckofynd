@@ -113,7 +113,7 @@ let household = null, householdMembers = [], householdInvites = [];
 async function loadAuthAndHousehold(isRetry){
   const { data } = await sbAuth.auth.getSession();
   session = data.session || null;
-  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; nutritionGoal=null; todayActivity=null; todayFoodLogs=[]; render(); return; }
+  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; currentMemberId=null; memberGoals=[]; todayActivity=null; todayFoodLogs=[]; render(); return; }
   householdLoadError = false;
   try{
     const mems = await supa.selectRaw('household_members?select=*');
@@ -126,6 +126,13 @@ async function loadAuthAndHousehold(isRetry){
       householdMembers = Array.isArray(roster) ? roster : [];
       const invites = await supa.selectRaw(`household_invites?select=*&household_id=eq.${mine.household_id}`);
       householdInvites = Array.isArray(invites) ? invites : [];
+      // Personal tracking (goals/activity/food) belongs to a HouseholdMember,
+      // not directly to the login -- resolve "my own member row" as the
+      // default subject, but a member switcher (see viewHealth) lets you
+      // manage an accountless member (e.g. a child) instead.
+      if(!currentMemberId || !householdMembers.some(m=>m.id===currentMemberId)){
+        currentMemberId = mine.id;
+      }
     } else if(!isRetry){
       // Brand-new signup: the DB trigger that creates the household may not have committed yet.
       setTimeout(()=>loadAuthAndHousehold(true), 1200);
@@ -137,7 +144,7 @@ async function loadAuthAndHousehold(isRetry){
   render();
   loadShoppingList();
   loadWatchlist();
-  loadNutritionGoal();
+  loadMemberGoals();
   loadTodayActivity();
   loadTodayFoodLogs();
 }
@@ -414,23 +421,38 @@ async function removeWatchItem(id){
   watchlist = watchlist.filter(w=>w.id!==id); render();
   try{ await supa.deleteWhere('watchlist_items', `id=eq.${id}`); }catch(e){ /* tyst */ }
 }
-const DEFAULT_NUTRITION_GOAL = { baseKcalGoal:2200, proteinGoalG:120, carbsGoalG:null, fatGoalG:null, calorieStrategy:'fixed', partialAdjustmentPct:50 };
+// Personal tracking (goals/activity/food) belongs to a HouseholdMember, not
+// directly to a login -- a household can include people with no account of
+// their own (a child), and an adult's OWN account-linked data stays private
+// from every other adult in the household (RLS: member_data_visible()).
+// `currentMemberId` is who you're currently viewing/managing -- defaults to
+// your own member row, switchable to any accountless member you can manage.
 const EMPTY_ACTIVITY = { activeCalories:0, totalCaloriesBurned:0, steps:0, workoutMinutes:0, weight:null, bodyFatPercentage:null, restingEnergy:0, distanceKm:null };
-async function loadNutritionGoal(){
-  if(!session){ nutritionGoal=null; return; }
+const GOAL_TYPE_LABELS = { lose_weight:'Gå ner i vikt', maintain:'Behålla vikten', build_muscle:'Bygga muskler', save_money:'Handla billigt', high_protein:'Proteinrikt', variety:'Äta varierat', custom:'Eget mål' };
+function mapGoalRow(r){
+  return { id:r.id, goalType:r.goal_type, label:r.label, priority:r.priority, status:r.status, pausedUntil:r.paused_until,
+    baseKcalGoal:r.base_kcal_goal, proteinGoalG:r.protein_goal_g!=null?Number(r.protein_goal_g):null,
+    carbsGoalG:r.carbs_goal_g!=null?Number(r.carbs_goal_g):null, fatGoalG:r.fat_goal_g!=null?Number(r.fat_goal_g):null,
+    calorieStrategy:r.calorie_strategy, partialAdjustmentPct:r.partial_adjustment_pct!=null?Number(r.partial_adjustment_pct):50,
+    precisionLevel:r.precision_level };
+}
+async function loadMemberGoals(){
+  if(!session || !currentMemberId){ memberGoals=[]; return; }
   try{
-    const rows = await supa.selectRaw(`nutrition_goals?select=*&user_id=eq.${session.user.id}`);
-    const r = Array.isArray(rows) ? rows[0] : null;
-    nutritionGoal = r ? { baseKcalGoal:r.base_kcal_goal, proteinGoalG:Number(r.protein_goal_g),
-      carbsGoalG:r.carbs_goal_g!=null?Number(r.carbs_goal_g):null, fatGoalG:r.fat_goal_g!=null?Number(r.fat_goal_g):null,
-      calorieStrategy:r.calorie_strategy, partialAdjustmentPct:Number(r.partial_adjustment_pct) } : { ...DEFAULT_NUTRITION_GOAL };
-  }catch(e){ nutritionGoal = { ...DEFAULT_NUTRITION_GOAL }; }
+    const rows = await supa.selectRaw(`member_goals?select=*&household_member_id=eq.${currentMemberId}&status=neq.archived&order=created_at.asc`);
+    memberGoals = Array.isArray(rows) ? rows.map(mapGoalRow) : [];
+  }catch(e){ memberGoals=[]; }
+  render();
+}
+async function switchMember(memberId){
+  currentMemberId = memberId; render();
+  await Promise.all([loadMemberGoals(), loadTodayActivity(), loadTodayFoodLogs()]);
   render();
 }
 async function loadTodayActivity(){
-  if(!session){ todayActivity=null; return; }
+  if(!session || !currentMemberId){ todayActivity=null; return; }
   try{
-    const rows = await supa.selectRaw(`activity_logs?select=*&user_id=eq.${session.user.id}&log_date=eq.${todayDateStr()}&source=eq.manual`);
+    const rows = await supa.selectRaw(`activity_logs?select=*&household_member_id=eq.${currentMemberId}&log_date=eq.${todayDateStr()}&source=eq.manual`);
     const r = Array.isArray(rows) ? rows[0] : null;
     todayActivity = r ? { activeCalories:r.active_calories||0, totalCaloriesBurned:r.total_calories_burned||0, steps:r.steps||0,
       workoutMinutes:r.workout_minutes||0, weight:r.weight!=null?Number(r.weight):null, bodyFatPercentage:r.body_fat_percentage!=null?Number(r.body_fat_percentage):null,
@@ -439,26 +461,58 @@ async function loadTodayActivity(){
   render();
 }
 async function loadTodayFoodLogs(){
-  if(!session){ todayFoodLogs=[]; return; }
+  if(!session || !currentMemberId){ todayFoodLogs=[]; return; }
   try{
-    const rows = await supa.selectRaw(`food_logs?select=*&user_id=eq.${session.user.id}&log_date=eq.${todayDateStr()}&order=logged_at.asc`);
+    const rows = await supa.selectRaw(`food_logs?select=*&household_member_id=eq.${currentMemberId}&log_date=eq.${todayDateStr()}&order=logged_at.asc`);
     todayFoodLogs = Array.isArray(rows) ? rows.map(r=>({ id:r.id, description:r.description, kcal:r.kcal,
       proteinG:r.protein_g!=null?Number(r.protein_g):0, carbsG:r.carbs_g!=null?Number(r.carbs_g):0, fatG:r.fat_g!=null?Number(r.fat_g):0, source:r.source })) : [];
   }catch(e){ todayFoodLogs=[]; }
   render();
 }
-async function saveNutritionGoal(){
-  if(!session || !nutritionGoal) return;
-  const kcal = Math.max(800, parseInt((document.getElementById('goal_kcal')||{}).value)||nutritionGoal.baseKcalGoal);
-  const protein = Math.max(0, parseFloat((document.getElementById('goal_protein')||{}).value)||nutritionGoal.proteinGoalG);
-  const strategy = healthGoalStrategyDraft || nutritionGoal.calorieStrategy;
-  const partialPct = Math.max(0, Math.min(100, parseFloat((document.getElementById('goal_partial_pct')||{}).value)||nutritionGoal.partialAdjustmentPct));
-  nutritionGoal = { ...nutritionGoal, baseKcalGoal:kcal, proteinGoalG:protein, calorieStrategy:strategy, partialAdjustmentPct:partialPct };
-  healthGoalStrategyDraft = null; render(); showToast('✓ Mål sparade');
-  try{ await supa.insert('nutrition_goals', { user_id:session.user.id, base_kcal_goal:kcal, protein_goal_g:protein, calorie_strategy:strategy, partial_adjustment_pct:partialPct, updated_at:new Date().toISOString() }); }catch(e){ /* tyst */ }
+// "Mina mål" -- a member can hold several goals at once (primary + any
+// number of secondary), each independently added/paused/resumed/archived.
+// Pausing never deletes anything or requires re-onboarding to undo.
+function openGoalForm(){ goalFormOpen = true; goalFormDraft = { goalType:'lose_weight', priority: memberGoals.some(g=>g.priority==='primary'&&g.status==='active')?'secondary':'primary', calorieStrategy:'fixed', partialAdjustmentPct:50, precisionLevel:'normal' }; render(); }
+function closeGoalForm(){ goalFormOpen = false; render(); }
+function setGoalDraftField(field, value){ goalFormDraft[field] = value; render(); }
+async function saveNewGoal(){
+  if(!session || !currentMemberId) return;
+  const kcalVal = (document.getElementById('newgoal_kcal')||{}).value;
+  const proteinVal = (document.getElementById('newgoal_protein')||{}).value;
+  const hasKcal = !!kcalVal;
+  const id = crypto.randomUUID();
+  const row = { id, household_member_id:currentMemberId, goal_type:goalFormDraft.goalType, priority:goalFormDraft.priority, status:'active',
+    paused_until:null, base_kcal_goal: hasKcal?parseInt(kcalVal):null, protein_goal_g: proteinVal?parseFloat(proteinVal):null,
+    calorie_strategy: hasKcal?goalFormDraft.calorieStrategy:null, partial_adjustment_pct: goalFormDraft.partialAdjustmentPct,
+    precision_level: goalFormDraft.precisionLevel };
+  memberGoals.push(mapGoalRow(row));
+  goalFormOpen = false; render(); showToast('✓ Mål tillagt');
+  try{ await supa.insert('member_goals', row); }catch(e){ /* tyst */ }
+}
+async function pauseGoal(goalId){
+  const g = memberGoals.find(x=>x.id===goalId); if(!g) return;
+  g.status = 'paused'; render();
+  try{ await supa.update('member_goals', goalId, { status:'paused' }); }catch(e){ /* tyst */ }
+}
+async function resumeGoal(goalId){
+  const g = memberGoals.find(x=>x.id===goalId); if(!g) return;
+  g.status = 'active'; g.pausedUntil = null; render();
+  try{ await supa.update('member_goals', goalId, { status:'active', paused_until:null }); }catch(e){ /* tyst */ }
+}
+async function archiveGoal(goalId){
+  memberGoals = memberGoals.filter(g=>g.id!==goalId); render();
+  try{ await supa.update('member_goals', goalId, { status:'archived' }); }catch(e){ /* tyst */ }
+}
+// The dashboard needs exactly one kcal target to compute "kcal kvar idag"
+// against -- the active PRIMARY goal that actually has a kcal target (a
+// pure "spara pengar" or "äta varierat" goal has none, and that's fine:
+// no kcal tracking gets forced on someone who never asked for it).
+function primaryTrackingGoal(){
+  return memberGoals.find(g=>g.status==='active' && g.priority==='primary' && g.baseKcalGoal!=null)
+      || memberGoals.find(g=>g.status==='active' && g.baseKcalGoal!=null) || null;
 }
 async function saveTodayActivity(){
-  if(!session || !todayActivity) return;
+  if(!session || !todayActivity || !currentMemberId) return;
   const steps = Math.max(0, parseInt((document.getElementById('act_steps')||{}).value)||0);
   const active = Math.max(0, parseInt((document.getElementById('act_active_kcal')||{}).value)||0);
   const workoutMin = Math.max(0, parseInt((document.getElementById('act_workout_min')||{}).value)||0);
@@ -466,10 +520,10 @@ async function saveTodayActivity(){
   const weight = weightRaw ? parseFloat(String(weightRaw).replace(',','.')) : null;
   todayActivity = { ...todayActivity, steps, activeCalories:active, workoutMinutes:workoutMin, weight };
   render(); showToast('✓ Aktivitet sparad');
-  try{ await supa.insert('activity_logs', { user_id:session.user.id, log_date:todayDateStr(), source:'manual', steps, active_calories:active, workout_minutes:workoutMin, weight, last_synced_at:new Date().toISOString() }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('activity_logs', { household_member_id:currentMemberId, log_date:todayDateStr(), source:'manual', steps, active_calories:active, workout_minutes:workoutMin, weight, last_synced_at:new Date().toISOString() }); }catch(e){ /* tyst */ }
 }
 async function addFoodLogManual(){
-  if(!session) return;
+  if(!session || !currentMemberId) return;
   const desc = (document.getElementById('food_desc')||{}).value||'';
   const kcalVal = (document.getElementById('food_kcal')||{}).value;
   if(!desc.trim() || !kcalVal) return;
@@ -479,19 +533,31 @@ async function addFoodLogManual(){
   todayFoodLogs.push({ id, description:desc.trim(), kcal, proteinG:protein, carbsG:0, fatG:0, source:'manual' });
   ['food_desc','food_kcal','food_protein'].forEach(fid=>{ const el=document.getElementById(fid); if(el) el.value=''; });
   render();
-  try{ await supa.insert('food_logs', { id, user_id:session.user.id, log_date:todayDateStr(), description:desc.trim(), kcal, protein_g:protein, source:'manual' }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('food_logs', { id, household_member_id:currentMemberId, log_date:todayDateStr(), description:desc.trim(), kcal, protein_g:protein, source:'manual' }); }catch(e){ /* tyst */ }
 }
 async function logRecipeEaten(recipeId){
   if(!session){ showToast('🔐 Logga in för att logga måltider'); return; }
+  if(!currentMemberId) return;
   const r = RECIPES.find(x=>x.id===recipeId); if(!r) return;
   const id = crypto.randomUUID();
   const entry = { id, description:r.title, kcal:r.kcal||0, proteinG:Number(r.proteinG)||0, carbsG:Number(r.carbsG)||0, fatG:Number(r.fatG)||0, source:'recipe:'+recipeId };
   todayFoodLogs.push(entry); render(); showToast(`✓ ${r.title} loggad`);
-  try{ await supa.insert('food_logs', { id, user_id:session.user.id, log_date:todayDateStr(), description:entry.description, kcal:entry.kcal, protein_g:entry.proteinG, carbs_g:entry.carbsG, fat_g:entry.fatG, source:entry.source }); }catch(e){ /* tyst */ }
+  try{ await supa.insert('food_logs', { id, household_member_id:currentMemberId, log_date:todayDateStr(), description:entry.description, kcal:entry.kcal, protein_g:entry.proteinG, carbs_g:entry.carbsG, fat_g:entry.fatG, source:entry.source }); }catch(e){ /* tyst */ }
 }
 async function removeFoodLog(id){
   todayFoodLogs = todayFoodLogs.filter(f=>f.id!==id); render();
   try{ await supa.delete('food_logs', id); }catch(e){ /* tyst */ }
+}
+async function addHouseholdMember(){
+  if(!session || !household) return;
+  const el = document.getElementById('new_member_name');
+  const name = (el||{}).value||'';
+  if(!name.trim()) return;
+  if(householdMembers.length + householdInvites.length >= 5){ showToast('Hushållet är fullt (max 5)'); return; }
+  const id = crypto.randomUUID();
+  const row = { id, household_id:household.id, display_name:name.trim(), is_owner:false, user_id:null, email:null };
+  householdMembers.push(row); if(el) el.value=''; render();
+  try{ await supa.insert('household_members', row); }catch(e){ /* tyst */ }
 }
 async function sendLoginLink(){
   const email = (document.getElementById('auth_email')||{}).value||'';
@@ -510,7 +576,7 @@ async function inviteFamilyMember(){
   loadAuthAndHousehold();
 }
 async function cancelInvite(inviteId){ try{ await supa.deleteWhere('household_invites', `id=eq.${inviteId}`); }catch(e){} loadAuthAndHousehold(); }
-async function removeFamilyMember(userId){ try{ await supa.deleteWhere('household_members', `user_id=eq.${userId}`); }catch(e){} loadAuthAndHousehold(); }
+async function removeFamilyMember(memberId){ try{ await supa.deleteWhere('household_members', `id=eq.${memberId}`); }catch(e){} loadAuthAndHousehold(); }
 
 // ── Data (från Supabase, multi-område) ──────────────────────
 const CHAIN_FALLBACK = {
@@ -805,21 +871,22 @@ let recipeBudget = localStorage.getItem('vf_recipe_budget') || '';
 let householdSize = parseInt(localStorage.getItem('vf_household_size')) || 4;
 function setHouseholdSize(n){ householdSize = Math.max(1, Math.min(10, n)); localStorage.setItem('vf_household_size', householdSize); render(); }
 
-// ── Hälsa & dynamiska kostmål ────────────────────────────────
-// Per-user (never household-shared -- weight/calories/activity are private
-// even between people who share a shopping list). `source` on every row
-// lets a future real integration (apple_health/garmin/health_connect) slot
-// in without a schema change -- everything here is 'manual' until one exists.
-let nutritionGoal = null, todayActivity = null, todayFoodLogs = [];
-let healthGoalStrategyDraft = null; // transient UI-only override until saved, since render() rebuilds the <select> from state
+// ── Hälsa & flexibla, per-person kostmål ─────────────────────
+// Personal (never household-shared -- weight/calories/activity are private
+// even between people who share a shopping list; see member_data_visible()
+// RLS). `source` on activity_logs lets a future real integration
+// (apple_health/garmin/health_connect) slot in without a schema change --
+// everything here is 'manual' until one exists.
+let currentMemberId = null, memberGoals = [], todayActivity = null, todayFoodLogs = [];
+let goalFormOpen = false, goalFormDraft = {};
 function todayDateStr(){ return new Date().toISOString().slice(0,10); }
-function setGoalStrategyDraft(v){ healthGoalStrategyDraft = v; render(); }
 function computeKcalGoalToday(){
-  if(!nutritionGoal) return 2200;
-  const base = nutritionGoal.baseKcalGoal;
+  const g = primaryTrackingGoal();
+  if(!g) return null; // no active kcal-tracking goal -- don't invent a number nobody asked for
+  const base = g.baseKcalGoal;
   const active = (todayActivity && todayActivity.activeCalories) || 0;
-  if(nutritionGoal.calorieStrategy==='dynamic') return Math.round(base + active);
-  if(nutritionGoal.calorieStrategy==='partial') return Math.round(base + active*(nutritionGoal.partialAdjustmentPct/100));
+  if(g.calorieStrategy==='dynamic') return Math.round(base + active);
+  if(g.calorieStrategy==='partial') return Math.round(base + active*(g.partialAdjustmentPct/100));
   return base;
 }
 function computeKcalEatenToday(){ return todayFoodLogs.reduce((s,f)=>s+(f.kcal||0),0); }
@@ -1290,10 +1357,14 @@ function householdPanel(){
   const myId = session.user.id;
   const isOwner = householdMembers.some(m=>m.user_id===myId && m.is_owner);
   const total = householdMembers.length + householdInvites.length;
-  const memberRows = householdMembers.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
-      <span style="font-size:13.5px;">${esc(m.email)}${m.is_owner?' 👑':''}${m.user_id===myId?' (du)':''}</span>
-      ${(isOwner && m.user_id!==myId) ? `<button onclick="removeFamilyMember('${m.user_id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Ta bort</button>` : ''}
-    </div>`).join('');
+  const memberRows = householdMembers.map(m=>{
+    const name = m.user_id ? (m.email||'') : (m.display_name||'Medlem');
+    const accountless = !m.user_id;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
+      <span style="font-size:13.5px;">${esc(name)}${m.is_owner?' 👑':''}${m.user_id===myId?' (du)':''}${accountless?' <span style="color:#B6A893;font-size:11.5px;">· inget eget konto</span>':''}</span>
+      ${(isOwner && m.user_id!==myId) ? `<button onclick="removeFamilyMember('${m.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Ta bort</button>` : ''}
+    </div>`;
+  }).join('');
   const inviteRows = householdInvites.map(i=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;">
       <span style="font-size:13.5px;color:#8A7E6E;">${esc(i.email)} · väntar</span>
       ${isOwner ? `<button onclick="cancelInvite('${i.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Avbryt</button>` : ''}
@@ -1304,8 +1375,12 @@ function householdPanel(){
       <button onclick="signOut()" style="border:none;background:none;color:#8A7E6E;font-size:12px;cursor:pointer;text-decoration:underline;">Logga ut</button>
     </div>
     ${memberRows}${inviteRows}
+    ${total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
+      <input id="new_member_name" placeholder="namn (t.ex. barn utan eget konto)" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;" onkeydown="if(event.key==='Enter')addHouseholdMember()">
+      <button onclick="addHouseholdMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Lägg till</button>
+    </div>` : ''}
     ${isOwner && total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
-      <input id="invite_email" type="email" placeholder="familjemedlems mail" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
+      <input id="invite_email" type="email" placeholder="familjemedlems mail (eget konto)" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
       <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
     </div>` : (total>=5 ? `<div style="margin-top:8px;font-size:12px;color:#8A7E6E;">Hushållet är fullt (max 5).</div>` : '')}
   </div>`;
@@ -1697,52 +1772,87 @@ function viewWeeklyMenu(){
     <button onclick="showWeeklyMenu=false; render();" style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:transparent;color:#8A7E6E;font-weight:600;font-size:13px;cursor:pointer;font-family:${FAM};">← Tillbaka till alla recept</button>`;
 }
 function viewHealth(){
-  if(!session) return loginGate('Logga in för att se din hälsovy', 'Dina mål, din aktivitet och vad du ätit sparas kopplat till ditt konto — aldrig delat med andra i hushållet, aldrig sålt vidare.');
-  if(!nutritionGoal || !todayActivity) return `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Laddar…</div>`;
+  if(!session) return loginGate('Logga in för att se din hälsovy', 'Dina mål, din aktivitet och vad du ätit sparas kopplat till din profil — aldrig synligt för andra vuxna i hushållet, aldrig sålt vidare.');
+  if(!currentMemberId || !todayActivity) return `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Laddar…</div>`;
   if(recipesLoadedForArea !== currentAreaId) loadRecipes();
 
-  const goalKcal = computeKcalGoalToday();
+  const trackedGoal = primaryTrackingGoal();
+  const goalKcal = computeKcalGoalToday(); // null = ingen aktiv kalorispårning, och det är helt okej
   const eatenKcal = computeKcalEatenToday();
-  const remainingKcal = goalKcal - eatenKcal;
+  const remainingKcal = goalKcal!=null ? goalKcal - eatenKcal : null;
   const eatenProtein = computeProteinEatenToday();
-  const remainingProtein = Math.max(0, nutritionGoal.proteinGoalG - eatenProtein);
+  const proteinTarget = memberGoals.find(g=>g.status==='active' && g.proteinGoalG!=null)?.proteinGoalG ?? null;
+  const remainingProtein = proteinTarget!=null ? Math.max(0, proteinTarget - eatenProtein) : null;
   const activeKcal = todayActivity.activeCalories || 0;
-  const strategyDraft = healthGoalStrategyDraft || nutritionGoal.calorieStrategy;
 
-  const strategyLabel = { fixed:'Fast kalorimål', partial:'Delvis aktivitetsjustering', dynamic:'Dynamiskt mål' }[nutritionGoal.calorieStrategy] || 'Fast kalorimål';
-  const strategyExplain = nutritionGoal.calorieStrategy==='fixed' ? 'Din aktivitet idag påverkar inte dagens matbudget.'
-    : nutritionGoal.calorieStrategy==='partial' ? `${nutritionGoal.partialAdjustmentPct}% av dagens aktiva förbränning (${activeKcal} kcal) läggs till din matbudget.`
-    : `Hela dagens aktiva förbränning (${activeKcal} kcal) läggs till din matbudget.`;
+  const memberSwitcher = householdMembers.length>1 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;">
+    ${householdMembers.map(m=>{
+      const active = m.id===currentMemberId;
+      const name = m.display_name || (m.email||'').split('@')[0] || 'Medlem';
+      return `<button onclick="switchMember('${m.id}')" style="flex:none;padding:9px 14px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${esc(name)}</button>`;
+    }).join('')}
+  </div>` : '';
 
+  const strategyLabel = trackedGoal ? { fixed:'Fast kalorimål', partial:'Delvis aktivitetsjustering', dynamic:'Dynamiskt mål' }[trackedGoal.calorieStrategy] : '';
+  const dashboardFooter = goalKcal!=null ? `<div style="margin-top:16px;background:rgba(255,255,255,.14);border-radius:14px;padding:12px 14px;">
+      <div style="font-size:15px;font-weight:800;">${remainingKcal>=0?remainingKcal+' kcal kvar idag':Math.abs(remainingKcal)+' kcal över målet'}</div>
+      <div style="font-size:12px;opacity:.85;margin-top:3px;">${esc(strategyLabel)}</div>
+    </div>` : `<div style="margin-top:16px;background:rgba(255,255,255,.14);border-radius:14px;padding:12px 14px;font-size:13px;">Inget kalorimål aktivt just nu — <span style="text-decoration:underline;cursor:pointer;" onclick="openGoalForm()">lägg till ett</span> om du vill spåra kalorier.</div>`;
   const dashboard = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
     <div style="font-size:13px;opacity:.92;font-weight:600;">💪 Idag</div>
     <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;">
-      <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${eatenKcal}</div><div style="font-size:11px;opacity:.85;">av ${goalKcal} kcal</div></div>
-      <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${Math.round(eatenProtein)}</div><div style="font-size:11px;opacity:.85;">av ${nutritionGoal.proteinGoalG}g protein</div></div>
+      <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${eatenKcal}</div><div style="font-size:11px;opacity:.85;">${goalKcal!=null?'av '+goalKcal+' kcal':'kcal ätit'}</div></div>
+      ${proteinTarget!=null?`<div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${Math.round(eatenProtein)}</div><div style="font-size:11px;opacity:.85;">av ${proteinTarget}g protein</div></div>`:''}
       <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${activeKcal}</div><div style="font-size:11px;opacity:.85;">kcal aktivitet</div></div>
       <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${todayActivity.steps||0}</div><div style="font-size:11px;opacity:.85;">steg</div></div>
     </div>
-    <div style="margin-top:16px;background:rgba(255,255,255,.14);border-radius:14px;padding:12px 14px;">
-      <div style="font-size:15px;font-weight:800;">${remainingKcal>=0?remainingKcal+' kcal kvar idag':Math.abs(remainingKcal)+' kcal över målet'}</div>
-      <div style="font-size:12px;opacity:.85;margin-top:3px;">${esc(strategyLabel)} · ${esc(strategyExplain)}</div>
-    </div>
+    ${dashboardFooter}
   </div>`;
 
-  const goalForm = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:12px;">🎯 Dina mål</div>
-    <div style="display:flex;gap:10px;margin-bottom:12px;">
-      <label style="flex:1;">${lbl('Kalorimål/dag')}<input id="goal_kcal" type="number" value="${nutritionGoal.baseKcalGoal}" style="${inputStyle()}"></label>
-      <label style="flex:1;">${lbl('Proteinmål (g)')}<input id="goal_protein" type="number" value="${nutritionGoal.proteinGoalG}" style="${inputStyle()}"></label>
-    </div>
-    <label style="display:block;margin-bottom:10px;">${lbl('Strategi vid träning')}
-      <select id="goal_strategy" onchange="setGoalStrategyDraft(this.value)" style="${inputStyle()}">
-        <option value="fixed" ${strategyDraft==='fixed'?'selected':''}>Fast kalorimål</option>
-        <option value="partial" ${strategyDraft==='partial'?'selected':''}>Delvis aktivitetsjustering</option>
-        <option value="dynamic" ${strategyDraft==='dynamic'?'selected':''}>Dynamiskt mål</option>
-      </select>
-    </label>
-    ${strategyDraft==='partial' ? `<label style="display:block;margin-bottom:12px;">${lbl('Andel av aktivitet som läggs till (%)')}<input id="goal_partial_pct" type="number" value="${nutritionGoal.partialAdjustmentPct}" style="${inputStyle()}"></label>` : ''}
-    <button onclick="saveNutritionGoal()" style="width:100%;padding:12px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Spara mål</button>
+  // "Mina mål" -- pause/resume/add without ever needing to re-onboard.
+  // Language stays neutral/helpful throughout (no "du missade ditt mål"),
+  // and archiving a goal never touches logged history.
+  function goalRow(g){
+    const label = g.label || GOAL_TYPE_LABELS[g.goalType] || g.goalType;
+    const detail = [g.baseKcalGoal!=null?g.baseKcalGoal+' kcal':'', g.proteinGoalG!=null?g.proteinGoalG+'g protein':''].filter(Boolean).join(' · ');
+    const isPaused = g.status==='paused';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F3ECDF;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14px;${isPaused?'color:#B6A893;':''}">${esc(label)}${g.priority==='secondary'?` <span style="font-weight:500;color:#B6A893;font-size:11.5px;">(sekundärt)</span>`:''}${isPaused?' <span style="font-weight:500;font-size:11.5px;">· pausat</span>':''}</div>
+        ${detail?`<div style="font-size:12px;color:#8A7E6E;margin-top:1px;">${esc(detail)}</div>`:''}
+      </div>
+      ${isPaused
+        ? `<button onclick="resumeGoal('${g.id}')" style="flex:none;padding:6px 12px;border:1px solid #EFE6D8;border-radius:9px;background:#fff;color:#3E6632;font-weight:700;font-size:12px;cursor:pointer;font-family:${FAM};">Återuppta</button>`
+        : `<button onclick="pauseGoal('${g.id}')" style="flex:none;padding:6px 12px;border:1px solid #EFE6D8;border-radius:9px;background:#fff;color:#6A5E50;font-weight:700;font-size:12px;cursor:pointer;font-family:${FAM};">Pausa</button>`}
+      <button onclick="archiveGoal('${g.id}')" title="Ta bort" style="flex:none;border:none;background:none;color:#B6A893;cursor:pointer;font-size:15px;">✕</button>
+    </div>`;
+  }
+  const goalTypeOptions = Object.entries(GOAL_TYPE_LABELS).map(([v,l])=>`<option value="${v}" ${goalFormDraft.goalType===v?'selected':''}>${l}</option>`).join('');
+  const goalForm = goalFormOpen ? `<div style="background:#FBF6EE;border:1px dashed #E0D5C2;border-radius:14px;padding:14px;margin-top:10px;">
+      <label style="display:block;margin-bottom:10px;">${lbl('Typ av mål')}<select onchange="setGoalDraftField('goalType',this.value)" style="${inputStyle()}">${goalTypeOptions}</select></label>
+      <div style="font-size:12px;color:#8A7E6E;margin-bottom:10px;">Kalori- och proteinmål är valfria — lämna tomt om du bara vill ha receptförslag utan att räkna kalorier.</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <label style="flex:1;">${lbl('Kalorimål/dag (valfritt)')}<input id="newgoal_kcal" type="number" placeholder="t.ex. 2200" style="${inputStyle()}"></label>
+        <label style="flex:1;">${lbl('Proteinmål g (valfritt)')}<input id="newgoal_protein" type="number" placeholder="t.ex. 120" style="${inputStyle()}"></label>
+      </div>
+      <label style="display:block;margin-bottom:12px;">${lbl('Strategi vid träning (om kalorimål anges)')}
+        <select onchange="setGoalDraftField('calorieStrategy',this.value)" style="${inputStyle()}">
+          <option value="fixed" ${goalFormDraft.calorieStrategy==='fixed'?'selected':''}>Fast kalorimål</option>
+          <option value="partial" ${goalFormDraft.calorieStrategy==='partial'?'selected':''}>Delvis aktivitetsjustering</option>
+          <option value="dynamic" ${goalFormDraft.calorieStrategy==='dynamic'?'selected':''}>Dynamiskt mål</option>
+        </select>
+      </label>
+      <div style="display:flex;gap:10px;">
+        <button onclick="closeGoalForm()" style="flex:none;padding:12px 16px;border:1px solid #E3D8C6;border-radius:12px;background:#fff;color:#6A5E50;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Avbryt</button>
+        <button onclick="saveNewGoal()" style="flex:1;padding:12px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Lägg till mål</button>
+      </div>
+    </div>` : `<button onclick="openGoalForm()" style="width:100%;margin-top:10px;padding:12px;border:1px dashed #E0D5C2;border-radius:12px;background:transparent;color:#6A5E50;font-weight:700;font-size:13.5px;cursor:pointer;font-family:${FAM};">+ Lägg till mål</button>`;
+  const activeGoals = memberGoals.filter(g=>g.status==='active'), pausedGoals = memberGoals.filter(g=>g.status==='paused');
+  const goalsPanel = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
+    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:4px;">🎯 Mina mål</div>
+    <div style="font-size:12px;color:#8A7E6E;margin-bottom:8px;">Mål är förslag, inte regler — pausa eller ändra när som helst.</div>
+    ${(activeGoals.length||pausedGoals.length) ? activeGoals.map(goalRow).join('')+pausedGoals.map(goalRow).join('') : `<div style="font-size:13px;color:#8A7E6E;padding:8px 0;">Inga mål ännu.</div>`}
+    ${goalForm}
   </div>`;
 
   const activityForm = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
@@ -1765,7 +1875,7 @@ function viewHealth(){
       <button onclick="removeFoodLog('${f.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:16px;">✕</button>
     </div>`).join('');
   const foodLog = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:12px;">🍽️ Vad du ätit idag</div>
+    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:12px;">🍽️ Vad har ätits idag</div>
     ${foodRows || `<div style="font-size:13px;color:#8A7E6E;margin-bottom:10px;">Inget loggat än — lägg till manuellt, eller tryck "✓ Jag åt detta" på ett recept nedan.</div>`}
     <div style="display:flex;gap:8px;margin-top:${foodRows?'12px':'0'};">
       <input id="food_desc" placeholder="t.ex. Havregrynsgröt" style="${inputStyle()}flex:2;">
@@ -1776,32 +1886,36 @@ function viewHealth(){
   </div>`;
 
   // Rank existing (already deal-matched) weekly recipes by fit to what's
-  // actually left today -- over-budget recipes sink to the bottom rather
-  // than being hidden outright, so a quiet week (few/no recipes) still shows
-  // something instead of an empty list.
-  const candidates = RECIPES.filter(r=>r.kcal!=null).map(r=>{
-    const kcalDiff = Math.abs((r.kcal||0) - Math.max(0,remainingKcal));
-    const overBudget = remainingKcal>0 && r.kcal > remainingKcal*1.15;
-    const proteinFit = remainingProtein>0 ? Math.min(1,(Number(r.proteinG)||0)/remainingProtein) : 1;
-    return { r, score:(overBudget?1000:0)+kcalDiff-proteinFit*80 };
-  }).sort((a,b)=>a.score-b.score).slice(0,6);
-  const suggestRows = candidates.map(({r})=>`<div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px 16px;margin-bottom:10px;">
+  // left today when there IS a kcal goal; otherwise just surface a plain
+  // selection -- no kcal target means nothing to rank against, and forcing
+  // a "passar ditt mål" framing on someone who never set one would be
+  // exactly the kind of unearned precision this feature must avoid.
+  const hasKcalTarget = remainingKcal!=null;
+  const candidates = hasKcalTarget
+    ? RECIPES.filter(r=>r.kcal!=null).map(r=>{
+        const kcalDiff = Math.abs((r.kcal||0) - Math.max(0,remainingKcal));
+        const overBudget = remainingKcal>0 && r.kcal > remainingKcal*1.15;
+        const proteinFit = remainingProtein!=null && remainingProtein>0 ? Math.min(1,(Number(r.proteinG)||0)/remainingProtein) : 0;
+        return { r, score:(overBudget?1000:0)+kcalDiff-proteinFit*80 };
+      }).sort((a,b)=>a.score-b.score).slice(0,6).map(x=>x.r)
+    : RECIPES.slice(0,6);
+  const suggestRows = candidates.map(r=>`<div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px 16px;margin-bottom:10px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
         <div style="font-family:${DISP};font-weight:800;font-size:15px;">${esc(r.title)}</div>
         <button onclick="logRecipeEaten('${r.id}')" style="flex:none;padding:7px 12px;border:none;border-radius:10px;background:#3E6632;color:#fff;font-weight:700;font-size:12px;cursor:pointer;font-family:${FAM};">✓ Jag åt detta</button>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-        <span style="font-size:11.5px;font-weight:700;color:#8A5A2B;background:#FBF0DE;padding:4px 9px;border-radius:8px;">${r.kcal} kcal</span>
-        <span style="font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:4px 9px;border-radius:8px;">P ${r.proteinG}g</span>
+        ${r.kcal!=null?`<span style="font-size:11.5px;font-weight:700;color:#8A5A2B;background:#FBF0DE;padding:4px 9px;border-radius:8px;">${r.kcal} kcal</span>`:''}
+        ${r.proteinG!=null?`<span style="font-size:11.5px;font-weight:700;color:#3E6632;background:#EAF1E3;padding:4px 9px;border-radius:8px;">P ${r.proteinG}g</span>`:''}
         ${r.estimatedTotalCost!=null?`<span style="font-size:11.5px;font-weight:700;color:#6A5E50;background:#F0E8DA;padding:4px 9px;border-radius:8px;">ca ${kr(r.estimatedTotalCost)}</span>`:''}
       </div>
     </div>`).join('');
   const suggestSection = `<div style="margin-bottom:6px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:16px;margin-bottom:10px;">🍳 Middagar som passar ditt mål</div>
+    <div style="font-weight:800;font-family:${DISP};font-size:16px;margin-bottom:10px;">${hasKcalTarget?'🍳 Middagar som passar ditt mål':'🍳 Middagsförslag'}</div>
     ${RECIPES.length===0 ? `<div style="text-align:center;padding:24px 20px;color:#8A7E6E;font-size:13.5px;">Inga recept genererade för ${esc(currentAreaName)} än.</div>` : (suggestRows || `<div style="text-align:center;padding:24px 20px;color:#8A7E6E;font-size:13.5px;">Inga recept matchar just nu.</div>`)}
   </div>`;
 
-  return dashboard + goalForm + activityForm + foodLog + suggestSection;
+  return memberSwitcher + dashboard + goalsPanel + activityForm + foodLog + suggestSection;
 }
 function viewRecipes(){
   if(recipesLoadedForArea !== currentAreaId) loadRecipes();
