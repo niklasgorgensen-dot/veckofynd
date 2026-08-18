@@ -379,6 +379,16 @@ function switchCity(id){
   const c = CITIES.find(x=>x.id===id); if(!c) return;
   currentCityId = c.id; currentCityName = c.name;
   localStorage.setItem('vf_city_id', c.id); localStorage.setItem('vf_city_name', c.name);
+  // followedStoreIds otherwise wins recomputeScope() unconditionally (line ~229),
+  // so a store followed in one city silently keeps showing after switching to a
+  // totally different city -- drop any follow that isn't in the new city; a
+  // follow in a different AREA of the SAME city is still kept (that's the
+  // actual intended use of following an out-of-area-but-nearby store).
+  if(followedStoreIds.size){
+    const areaCity = new Map(AREAS.map(a=>[a.id, a.city_id]));
+    const keep = new Set(ALL_STORES.filter(st=>followedStoreIds.has(st.id) && areaCity.get(st.areaId)===id).map(st=>st.id));
+    if(keep.size !== followedStoreIds.size){ followedStoreIds = keep; saveFollowed(); }
+  }
   const areasInCity = AREAS.filter(a=>a.city_id===id);
   if(areasInCity.length){
     currentAreaId = areasInCity[0].id; currentAreaName = areasInCity[0].name;
