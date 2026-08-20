@@ -1,0 +1,18 @@
+# Secrets — never commit real credentials, even though this repo is public.
+# veckofynd.html embeds only the Supabase anon/publishable key, which is
+# meant to be public and is safe by design as long as RLS stays correct.
+# The service_role key must NEVER appear in this repo, in any file.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# OS / editor cruft
+.DS_Store
+*.log
+
+# Local scratch/build output, if any tooling is ever added later
+node_modules/
+dist/
