@@ -958,12 +958,40 @@ function normalize(s){ return (s||'').toLowerCase().replace(/[åä]/g,'a').repla
 // which kind of hit this was so callers can rank/label accordingly instead
 // of treating both as equally trustworthy (found the hard way: a raw
 // discount-% sort put exactly that noodle pot above real beef deals).
+// Short Swedish words can accidentally collide with a longer, completely
+// unrelated word that happens to contain them as a substring -- verified
+// against real deals data, not guessed: "läsk" (soda) sits right inside
+// "fläsk" (pork); "ost" (cheese) sits inside "bröst" (breast, as in every
+// kycklingbröst/kalkonbröst deal), "rost"/"rostbiff"/"rostade", and
+// "Frosties" (cereal).
+// Strip the colliding longer word out of the haystack before substring-
+// matching the short one, so a genuine standalone mention of the short
+// word elsewhere in the same text still matches while the accidental
+// collision doesn't. Extend this table as new collisions turn up in
+// practice -- same maintenance model as KEYWORD_EXCLUDES in
+// generate-weekly-recipes (also normalize()-key, not the raw word, per
+// that function's own hard-won lesson about å/ä/ö in table keys).
+const SEARCH_FALSE_FRIENDS = {
+  'lask': ['flask'],         // läsk (soda) vs fläsk (pork)
+  // ost (cheese) vs bröst/rost family. NOT just 'rost' -- that would also
+  // strip the "ost" out of legitimate compounds like "Hamburgerost" (which
+  // ends in ...ge-ROST), so this lists the specific colliding words instead
+  // of their shared 4-letter tail.
+  'ost': ['frost', 'rostbiff', 'rostade', 'rostat', 'ugnsrostad', 'mellanrost', 'morkrost', 'brost'],
+};
+function stripFalseFriends(text, word){
+  const friends = SEARCH_FALSE_FRIENDS[word];
+  if(!friends) return text;
+  let t = text;
+  for(const f of friends) t = t.split(f).join(' ');
+  return t;
+}
 function matchDealsForTerm(term, dealsArr){
   const n = normalize(term);
   const words = n.split(' ').filter(Boolean);
   return (dealsArr || ALL_DEALS).filter(d => {
     const dp = normalize(d.product), dd = normalize(d.detail||''), db = normalize(d.brand||'');
-    return words.every(w => dp.includes(w) || dd.includes(w) || db.includes(w));
+    return words.every(w => stripFalseFriends(dp,w).includes(w) || stripFalseFriends(dd,w).includes(w) || stripFalseFriends(db,w).includes(w));
   }).map(d => {
     // Brand is a real identity attribute (shown as its own label on every
     // card), not an incidental mention -- "Oatly" should match products
@@ -971,7 +999,7 @@ function matchDealsForTerm(term, dealsArr){
     // count as a strong match exactly like a product-name hit, not get
     // lumped in with weak detail-only variant-list hits.
     const dp2 = normalize(d.product), db2 = normalize(d.brand||'');
-    d.matchedInProduct = words.every(w => dp2.includes(w) || db2.includes(w));
+    d.matchedInProduct = words.every(w => stripFalseFriends(dp2,w).includes(w) || stripFalseFriends(db2,w).includes(w));
     return d;
   }).sort((a,b) => {
     if(a.matchedInProduct !== b.matchedInProduct) return a.matchedInProduct ? -1 : 1;
