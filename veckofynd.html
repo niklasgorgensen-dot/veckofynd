@@ -948,12 +948,35 @@ let watchlist = [];
 let searchInput = '', searchResults = null, searchDone = false;
 
 function normalize(s){ return (s||'').toLowerCase().replace(/[åä]/g,'a').replace(/ö/g,'o').replace(/[-_,.]/g,' ').trim(); }
-function matchDealsForTerm(term){
+// A term found in the product's own name is real signal ("Coca Cola" ->
+// product "Coca-Cola Zero 1,5L"). A term found only inside `detail` is much
+// weaker: detail often lists many flavor/variant names in one
+// comma-separated string (a Knorr noodle snack pot's detail can read
+// "...Bolognese, ...Nötkött, ...Carbonara..."), so a search for "nötkött"
+// matching there doesn't mean the PRODUCT is beef -- it means beef is one of
+// a dozen flavor options on an unrelated product. d.matchedInProduct tags
+// which kind of hit this was so callers can rank/label accordingly instead
+// of treating both as equally trustworthy (found the hard way: a raw
+// discount-% sort put exactly that noodle pot above real beef deals).
+function matchDealsForTerm(term, dealsArr){
   const n = normalize(term);
-  return ALL_DEALS.filter(d => {
-    const dp = normalize(d.product), dd = normalize(d.detail||'');
-    return n.split(' ').every(w => dp.includes(w) || dd.includes(w));
-  }).sort((a,b) => ((b.origPrice-b.price)/(b.origPrice||1)) - ((a.origPrice-a.price)/(a.origPrice||1)));
+  const words = n.split(' ').filter(Boolean);
+  return (dealsArr || ALL_DEALS).filter(d => {
+    const dp = normalize(d.product), dd = normalize(d.detail||''), db = normalize(d.brand||'');
+    return words.every(w => dp.includes(w) || dd.includes(w) || db.includes(w));
+  }).map(d => {
+    // Brand is a real identity attribute (shown as its own label on every
+    // card), not an incidental mention -- "Oatly" should match products
+    // whose name is just "Ikaffe" with brand "Oatly" set separately, and
+    // count as a strong match exactly like a product-name hit, not get
+    // lumped in with weak detail-only variant-list hits.
+    const dp2 = normalize(d.product), db2 = normalize(d.brand||'');
+    d.matchedInProduct = words.every(w => dp2.includes(w) || db2.includes(w));
+    return d;
+  }).sort((a,b) => {
+    if(a.matchedInProduct !== b.matchedInProduct) return a.matchedInProduct ? -1 : 1;
+    return ((b.origPrice-b.price)/(b.origPrice||1)) - ((a.origPrice-a.price)/(a.origPrice||1));
+  });
 }
 
 function searchDeals(){
@@ -1113,10 +1136,42 @@ function header(){
         <button onclick="openSheet('vara')" style="width:42px;height:42px;flex:none;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
       </div>
     </div>
+    ${headerSearchBar()}
     <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
       ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}${navBtn('halsa','💪 Hälsa')}
     </nav>
   </header>`;
+}
+// Global, always-on-screen product search -- lives in the sticky header
+// (not a separate tab) so it's on the first page and follows scroll on
+// every tab, matching how matpriskollen decouples "what" (always-visible
+// text field) from "where" (a small persistent location pill, not a form
+// field you refill every search). Default "where" is wherever the app is
+// already scoped (current area / followed stores, searched instantly out
+// of already-loaded `deals`, zero network round trip) -- the postnummer/
+// geolocation flow from "Butiker nära dig" only kicks in if the user
+// explicitly picks a different place via the pill.
+function headerSearchBar(){
+  const locLabel = productSearchOrigin ? (productSearchOrigin.label||'').split(',')[0] : currentAreaName;
+  const picker = locationPickerOpen ? `<div style="max-width:1080px;margin:0 auto;padding:0 clamp(16px,4vw,28px) 10px;">
+      <div style="background:#fff;border:1px solid #EFE6D8;border-radius:14px;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="hsearch_location" type="text" placeholder="Postnummer eller ort, t.ex. 184 40" value="${esc(productSearchLocationInput)}" onkeydown="if(event.key==='Enter')submitLocationPicker()" style="flex:1;min-width:160px;padding:10px 12px;border-radius:11px;border:1px solid #EFE6D8;font-size:13.5px;font-family:${FAM};outline:none;">
+        <button onclick="submitLocationPicker()" style="padding:10px 14px;border-radius:11px;border:none;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Sök</button>
+        <button onclick="useMyLocationForHeaderSearch()" style="padding:10px 14px;border-radius:11px;border:1px solid #EFE6D8;background:#FBF6EE;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">📍 Min plats</button>
+        ${productSearchOrigin?`<button onclick="clearLocationChoice()" style="padding:10px 14px;border-radius:11px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">✕ Använd ${esc(currentAreaName)} igen</button>`:''}
+        ${productSearchError?`<div style="width:100%;font-size:12.5px;color:#C2431F;">${esc(productSearchError)}</div>`:''}
+      </div>
+    </div>` : '';
+  return `<div style="max-width:1080px;margin:0 auto;padding:0 clamp(16px,4vw,28px) 10px;">
+      <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #EFE6D8;border-radius:14px;padding:5px 6px 5px 14px;">
+        <span style="font-size:15px;flex:none;color:#8A7E6E;">🔍</span>
+        <input id="hsearch_term" type="text" placeholder="Sök varor, t.ex. nötkött, Coca Cola…" value="${esc(productSearchTerm)}" onkeydown="if(event.key==='Enter')headerProductSearch()" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:14px;font-family:${FAM};padding:9px 0;color:#2A211A;">
+        ${productSearchTerm?`<button onclick="clearProductSearch()" title="Rensa" style="flex:none;background:none;border:none;color:#B6A893;font-size:15px;cursor:pointer;padding:6px 4px;">✕</button>`:''}
+        <button onclick="openLocationPicker()" style="flex:none;display:flex;align-items:center;gap:4px;padding:8px 12px;border-radius:10px;border:none;background:#FBF6EE;color:#6A5E50;font-weight:700;font-size:12.5px;font-family:${FAM};cursor:pointer;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;">📍 ${esc(locLabel)} ▾</button>
+      </div>
+      ${productSearchLoading?`<div style="font-size:12.5px;color:#8A7E6E;margin-top:6px;">Söker…</div>`:''}
+    </div>
+    ${picker}`;
 }
 function detectMember(o){
   const d = (o.detail||'').toLowerCase(), p = (o.product||'').toLowerCase();
@@ -1195,12 +1250,13 @@ function offerCard(o){
     <div style="display:flex;align-items:flex-start;gap:12px;">
       ${dealImage(o,64)}
       <div style="flex:1;min-width:0;">
-        <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">${storeLogo(st,16,5)}${esc(st.name)}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">${storeLogo(st,16,5)}${esc(st.name)}${o.dist!=null?` · ${o.dist<10?o.dist.toFixed(1).replace('.',','):Math.round(o.dist)} km`:''}</span>
         ${brandRow}
         <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:${metaParts.length?'1px':'5px'};">${esc(o.product)}</div>
         <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
         ${memberBadge}
         ${cheaperRow}
+        ${o.matchNote?`<div style="font-size:11px;color:#A67C3D;margin-top:6px;">🔎 ${esc(o.matchNote)}</div>`:''}
       </div>
       ${badge}
     </div>
@@ -1213,6 +1269,10 @@ function offerCard(o){
 function viewOffers(){
   if(catalogLoading) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">Hämtar veckans erbjudanden…</div>`;
   if(catalogError) return `<div style="text-align:center;padding:60px 20px;color:#8A7E6E;">${esc(catalogError)}</div>`;
+  if(productSearchResults){
+    const clearBtn = `<button onclick="clearProductSearch()" style="padding:9px 15px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;margin-bottom:14px;">✕ Rensa sökning</button>`;
+    return clearBtn + productSearchResultsView();
+  }
   const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
   const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
   const chipDefs = ['Alla'].concat(present);
@@ -1231,6 +1291,7 @@ function viewOffers(){
       </div>
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
+    ${followedStoresStrip()}
     <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>
     ${moreBtn}`;
@@ -1474,6 +1535,130 @@ function renderStoreMap(){
     vfMapResizeObserver = new ResizeObserver(()=>{ if(vfMap) vfMap.invalidateSize(); });
     vfMapResizeObserver.observe(el);
   }
+}
+// ── Sök vara (produkt/märke + plats → vilken butik har den på erbjudande) ─
+// Two speeds, same matchDealsForTerm() engine underneath. Default: search
+// instantly against already-loaded `deals` (current area/followed stores,
+// zero network round trip) -- fast, and matches what the rest of the app
+// already scopes to. Only when the user explicitly picks a different place
+// via the header's location pill do we reach for the "Butiker nära dig"
+// machinery (geocodeLocation/distanceKm/STORE_DIRECTORY) to fetch deals for
+// a fresh set of nearby stores via the existing supa.fetchAllDeals() --
+// same call the city-scoped load already uses, just a different id list.
+let productSearchTerm = '', productSearchLocationInput = '', productSearchOrigin = null,
+    productSearchResults = null, productSearchLoading = false, productSearchError = null,
+    locationPickerOpen = false;
+const PRODUCT_SEARCH_STORE_COUNT = 30; // same nearest-N radius as "Butiker nära dig"
+
+function headerProductSearch(){
+  const termEl = document.getElementById('hsearch_term');
+  productSearchTerm = termEl ? termEl.value.trim() : productSearchTerm;
+  if(!productSearchTerm){ productSearchResults = null; render(); return; }
+  if(productSearchOrigin){ runProductSearch(productSearchOrigin); return; }
+  productSearchError = null;
+  productSearchResults = matchDealsForTerm(productSearchTerm, deals)
+    .map(d=>({ ...d, matchNote: d.matchedInProduct ? null : `Matchar bland flera varianter: "${productSearchTerm}"` }))
+    .sort((a,b)=> (b.matchedInProduct?1:0)-(a.matchedInProduct?1:0) || a.price-b.price);
+  render();
+  track('product_search_performed', { term: productSearchTerm, result_count: productSearchResults.length, scope: 'local' }, {}, { source:'user_action' });
+}
+function openLocationPicker(){ locationPickerOpen = !locationPickerOpen; render(); }
+async function submitLocationPicker(){
+  const locEl = document.getElementById('hsearch_location');
+  const locInput = locEl ? locEl.value.trim() : '';
+  productSearchLocationInput = locInput;
+  if(!locInput){ productSearchError = 'Ange ett postnummer eller en ort.'; render(); return; }
+  productSearchLoading = true; productSearchError = null; render();
+  let origin = null;
+  try{ origin = await geocodeLocation(locInput); }catch(e){ origin = null; }
+  productSearchLoading = false;
+  if(!origin){ productSearchError = `Hittade inte "${locInput}". Prova ett postnummer (t.ex. 184 40) eller en ort.`; render(); return; }
+  productSearchOrigin = origin;
+  locationPickerOpen = false;
+  if(productSearchTerm) await runProductSearch(origin); else render();
+}
+function useMyLocationForHeaderSearch(){
+  if(!navigator.geolocation){ productSearchError = 'Din enhet stödjer inte platsdelning.'; render(); return; }
+  productSearchLoading = true; productSearchError = null; render();
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      productSearchLoading = false;
+      productSearchOrigin = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'Min plats' };
+      locationPickerOpen = false;
+      if(productSearchTerm) runProductSearch(productSearchOrigin); else render();
+    },
+    ()=>{ productSearchLoading = false; productSearchError = 'Kunde inte hämta din plats. Kontrollera platsbehörighet.'; render(); },
+    { timeout: 10000 }
+  );
+}
+function clearLocationChoice(){
+  productSearchOrigin = null; productSearchLocationInput = ''; locationPickerOpen = false;
+  if(productSearchTerm) headerProductSearch(); else render();
+}
+// Fetches deals for a location-derived store set and matches -- used only
+// for the explicit "search elsewhere" path (productSearchOrigin set).
+async function runProductSearch(origin){
+  try{
+    const nearby = STORE_DIRECTORY
+      .filter(st=>st.lat!=null && st.lng!=null)
+      .map(st=>({ st, dist: distanceKm(origin.lat, origin.lng, st.lat, st.lng) }))
+      .sort((a,b)=>a.dist-b.dist)
+      .slice(0, PRODUCT_SEARCH_STORE_COUNT);
+    const distByStoreId = new Map(nearby.map(n=>[n.st.id, n.dist]));
+    const idsCsv = nearby.map(n=>n.st.id).join(',');
+    const todayStr = new Date().toISOString().slice(0,10);
+    const rawRows = idsCsv ? await supa.fetchAllDeals(idsCsv, todayStr) : [];
+    const nearbyDeals = rawRows.map(mapDealRow);
+    productSearchResults = matchDealsForTerm(productSearchTerm, nearbyDeals)
+      .map(d=>({ ...d, dist: distByStoreId.get(d.store),
+        matchNote: d.matchedInProduct ? null : `Matchar bland flera varianter: "${productSearchTerm}"` }))
+      // Real product-name/brand matches first (never bury an actual match
+      // behind a detail-only one just because the latter happens to be
+      // cheaper), then price ascending within each group.
+      .sort((a,b)=> (b.matchedInProduct?1:0)-(a.matchedInProduct?1:0) || a.price-b.price);
+    productSearchLoading = false;
+    render();
+    track('product_search_performed', { term: productSearchTerm, result_count: productSearchResults.length, store_count: nearby.length, scope: 'elsewhere' }, {}, { source:'user_action' });
+  }catch(e){
+    productSearchLoading = false; productSearchError = 'Något gick fel, försök igen.'; render();
+  }
+}
+function clearProductSearch(){
+  productSearchTerm=''; productSearchResults=null; productSearchError=null; render();
+}
+// Compact "Dina butiker" strip on the home page -- shows saved/followed
+// stores the same first-page, no-extra-navigation way the search now works,
+// per Niklas: butikerna man sparat ska synas "på ett liknande sätt".
+function followedStoresStrip(){
+  if(!followedStoreIds.size) return '';
+  const byStore = dealsByStore();
+  const chips = Array.from(followedStoreIds).map(id=>{
+    const st = storeById(id);
+    const count = (byStore.get(id)||[]).length;
+    return `<button onclick="go('butiker')" style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;cursor:pointer;font-family:${FAM};">
+        ${storeLogo(st,28,9)}
+        <span style="text-align:left;">
+          <span style="display:block;font-weight:700;font-size:12.5px;color:#2A211A;">${esc(st.name)}</span>
+          <span style="display:block;font-size:11px;color:#8A7E6E;">${count} erbjudanden</span>
+        </span>
+      </button>`;
+  }).join('');
+  return `<div style="margin-bottom:16px;">
+      <div style="font-weight:800;font-family:${DISP};font-size:13px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📍 Dina butiker</div>
+      <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;">${chips}</div>
+    </div>`;
+}
+function productSearchResultsView(){
+  const scoped = !productSearchOrigin;
+  const originLabel = productSearchOrigin && productSearchOrigin.label ? productSearchOrigin.label.split(',')[0] : '';
+  const scopeLabel = scoped
+    ? (followedStoreIds.size ? `bland dina ${followedStoreIds.size} valda butiker` : `i ${esc(currentAreaName)}`)
+    : `nära ${esc(originLabel)} (${PRODUCT_SEARCH_STORE_COUNT} närmaste butiker)`;
+  const heading = `<div style="margin-bottom:14px;"><div style="font-family:${DISP};font-weight:800;font-size:19px;">${productSearchResults.length} träffar för "${esc(productSearchTerm)}"</div><div style="font-size:13px;color:#8A7E6E;margin-top:2px;">Sorterat efter pris — sökt ${scopeLabel}.</div></div>`;
+  const grid = productSearchResults.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${productSearchResults.map(offerCard).join('')}</div>`
+    : `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga träffar just nu ${scopeLabel}. Prova ett annat sökord${scoped?' eller sök på en annan plats via 📍-knappen ovan':''}.</div>`;
+  return heading + grid;
 }
 function loginGate(title, subtitle){
   title = title || 'Logga in för att se listan';
