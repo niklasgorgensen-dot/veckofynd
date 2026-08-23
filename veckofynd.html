@@ -734,6 +734,24 @@ function mapDealRow(r){
     jamforpris:r.jamforpris!=null?Number(r.jamforpris):null, jamforenhet:r.jamforenhet||null,
     brand:r.brand||null, imageUrl:r.image_url||null, origin:r.origin||null, promoLabel:r.promo_label||null };
 }
+// The scraper occasionally writes the exact same deal twice (same store,
+// product, detail, price -- verified against the live table: 182 such
+// groups, 364 rows, 1.3% of all deals nationally). Rendered as-is that's a
+// literal duplicate card in the grid for no reason. fetchAllDeals already
+// orders by scraped_at.desc, so the first occurrence of a key is the
+// freshest -- keep that one, drop the rest. Applied once here rather than
+// at every ALL_DEALS assignment site so new callers get it for free.
+function dedupeDeals(dealsArr){
+  const seen = new Set();
+  const out = [];
+  for(const d of dealsArr){
+    const key = `${d.store}|${d.product}|${d.detail}|${d.price}`;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(d);
+  }
+  return out;
+}
 async function loadAreas(){
   try{
     const cityRows = await supa.selectRaw('cities?select=*&order=name.asc');
@@ -809,7 +827,7 @@ async function loadScopedFirst(){
     supa.fetchAllDeals(idsCsv, todayStr),
     supa.fetchAllProductLinks(idsCsv),
   ]);
-  ALL_DEALS = dealRows.map(mapDealRow);
+  ALL_DEALS = dedupeDeals(dealRows.map(mapDealRow));
   LINK_BY_KEY = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
   // Used to filter to id=in.(...) of just this area's linked product IDs --
   // with match-products now producing 20k+ links nationally, one area's
@@ -853,7 +871,7 @@ async function loadCityDataInBackground(){
         supa.fetchAllProductLinks(cityIds.join(',')),
         supa.fetchAllProducts(),
       ]);
-      cityDeals = dealRows.map(mapDealRow);
+      cityDeals = dedupeDeals(dealRows.map(mapDealRow));
       linkByKey = new Map(linkRows.map(l=>[`${l.store_id}::${l.raw_product_text}`, l.product_id]));
       fillSharedBrandImageOrigin(cityDeals, linkByKey, productRows);
     }
@@ -1652,7 +1670,7 @@ async function runProductSearch(origin){
     const idsCsv = nearby.map(n=>n.st.id).join(',');
     const todayStr = new Date().toISOString().slice(0,10);
     const rawRows = idsCsv ? await supa.fetchAllDeals(idsCsv, todayStr) : [];
-    const nearbyDeals = rawRows.map(mapDealRow);
+    const nearbyDeals = dedupeDeals(rawRows.map(mapDealRow));
     productSearchResults = matchDealsForTerm(productSearchTerm, nearbyDeals)
       .map(d=>({ ...d, dist: distByStoreId.get(d.store),
         matchNote: d.matchedInProduct ? null : `Matchar bland flera varianter: "${productSearchTerm}"` }))
