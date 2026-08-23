@@ -964,6 +964,19 @@ function normalize(s){ return (s||'').toLowerCase().replace(/[åä]/g,'a').repla
 // "fläsk" (pork); "ost" (cheese) sits inside "bröst" (breast, as in every
 // kycklingbröst/kalkonbröst deal), "rost"/"rostbiff"/"rostade", and
 // "Frosties" (cereal).
+//
+// This second batch (lok/glas/cola) came from a systematic sweep, not more
+// ad-hoc guessing: dumped every product/detail/brand string in the live
+// `deals` table (27,377 rows), tokenized and normalized them exactly like
+// this file's own normalize(), then checked every short (3-7 char) token
+// against every longer token that contains it as a substring -- 1,146
+// candidate pairs, most of them legitimate Swedish compounds (kyckling ->
+// kycklingfilé) and correctly left alone. Confirmed real collisions:
+// "lök" (onion) sits inside "Loka" (the water brand), "glas" (a drinking
+// glass) sits inside "glass" (ice cream, so searching for tableware
+// drowns in desserts), and "cola" sits inside "Ruccola"/"rucola" (arugula)
+// and "chocolate".
+//
 // Strip the colliding longer word out of the haystack before substring-
 // matching the short one, so a genuine standalone mention of the short
 // word elsewhere in the same text still matches while the accidental
@@ -978,6 +991,9 @@ const SEARCH_FALSE_FRIENDS = {
   // ends in ...ge-ROST), so this lists the specific colliding words instead
   // of their shared 4-letter tail.
   'ost': ['frost', 'rostbiff', 'rostade', 'rostat', 'ugnsrostad', 'mellanrost', 'morkrost', 'brost'],
+  'lok': ['loka'],                                    // lök (onion) vs Loka (water brand)
+  'glas': ['glass'],                                  // glas (drinking glass) vs glass (ice cream) -- covers glassbåt/glasspinne/etc too, they all contain "glass"
+  'cola': ['ruccola', 'rucola', 'chocolate', 'chocolat'], // cola (soda) vs Ruccola/rucola (arugula) and chocolate
 };
 function stripFalseFriends(text, word){
   const friends = SEARCH_FALSE_FRIENDS[word];
