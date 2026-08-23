@@ -1663,17 +1663,20 @@ function followedStoresStrip(){
   const chips = Array.from(followedStoreIds).map(id=>{
     const st = storeById(id);
     const count = (byStore.get(id)||[]).length;
-    return `<button onclick="go('butiker')" style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;cursor:pointer;font-family:${FAM};">
-        ${storeLogo(st,28,9)}
-        <span style="text-align:left;">
-          <span style="display:block;font-weight:700;font-size:12.5px;color:#2A211A;">${esc(st.name)}</span>
-          <span style="display:block;font-size:11px;color:#8A7E6E;">${count} erbjudanden</span>
-        </span>
-      </button>`;
+    return `<div style="position:relative;flex:none;">
+        <button onclick="go('butiker')" style="display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;cursor:pointer;font-family:${FAM};">
+          ${storeLogo(st,28,9)}
+          <span style="text-align:left;">
+            <span style="display:block;font-weight:700;font-size:12.5px;color:#2A211A;">${esc(st.name)}</span>
+            <span style="display:block;font-size:11px;color:#8A7E6E;">${count} erbjudanden</span>
+          </span>
+        </button>
+        <button onclick="event.stopPropagation();toggleFollow('${id}')" title="Sluta följa ${esc(st.name)}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #EFE6D8;background:#fff;color:#8A7E6E;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(42,33,26,.14);padding:0;">✕</button>
+      </div>`;
   }).join('');
   return `<div style="margin-bottom:16px;">
       <div style="font-weight:800;font-family:${DISP};font-size:13px;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📍 Dina butiker</div>
-      <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;">${chips}</div>
+      <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-top:6px;">${chips}</div>
     </div>`;
 }
 function productSearchResultsView(){
