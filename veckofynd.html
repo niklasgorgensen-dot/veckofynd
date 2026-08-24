@@ -1146,6 +1146,16 @@ const SEARCH_FALSE_FRIENDS = {
   'lok': ['loka'],                                    // lök (onion) vs Loka (water brand)
   'glas': ['glass'],                                  // glas (drinking glass) vs glass (ice cream) -- covers glassbåt/glasspinne/etc too, they all contain "glass"
   'cola': ['ruccola', 'rucola', 'chocolate', 'chocolat'], // cola (soda) vs Ruccola/rucola (arugula) and chocolate
+  // mjölk (milk) vs mjölkchoklad (milk CHOCOLATE) -- Niklas: sökning på
+  // "mjölk" visade Marabou-chokladkakor i prisjämförelsen eftersom
+  // "mjölkchoklad" contains "mjölk" as a substring. Checked the real
+  // product table: every "mjölkchoklad" hit (Marabou Bubbly/Choco Moment/
+  // Daim/Frukt & Mandel/Kakor/plain, plus a corn-snack coated in it) is a
+  // chocolate product, never milk -- a real collision like ost/frost, not
+  // a legitimate variant. Deliberately NOT stripping "kokosmjölk" (coconut
+  // milk) or "chokladmjölk" (a milk-based drink) -- both are still
+  // genuinely milk-family products a "mjölk" search should surface.
+  'mjolk': ['mjolkchoklad'],
 };
 function stripFalseFriends(text, word){
   const friends = SEARCH_FALSE_FRIENDS[word];
