@@ -647,6 +647,14 @@ let LINK_BY_KEY = new Map();
 // product_store_links -- never balloons to "every store in Sweden" just
 // because the fleet keeps growing. See loadStoreDirectory()/loadCityData().
 let STORE_DIRECTORY = [];
+// National, lightweight (~2,500 rows, one per canonical product) reference
+// table computed server-side from price_observations history (see migration
+// add_product_price_stats) -- "is this deal's current price at or near the
+// lowest we've ever recorded for this product" needs the FULL history, not
+// just whatever's in the currently-scoped `deals`, so this loads in full
+// exactly like STORE_DIRECTORY does.
+let PRICE_STATS_BY_PRODUCT = new Map();
+let showHistoricLowOnly = localStorage.getItem('vf_show_historic_low') === '1';
 let catalogLoading = true, catalogError = null;
 let followedStoreIds = new Set(JSON.parse(localStorage.getItem('vf_followed_stores')||'[]'));
 let vfMap = null, vfMapMarkers = {}, vfMapResizeObserver = null;
@@ -784,6 +792,27 @@ async function loadStoreDirectory(){
     STORE_DIRECTORY = Array.isArray(rows) ? rows.map(mapStoreRow) : [];
   }catch(e){ /* search just won't find anything until a retry */ }
 }
+async function loadPriceStats(){
+  try{
+    const rows = await supa.fetchAllPaginated(`product_price_stats?select=product_id,min_price,max_price,observation_count`);
+    PRICE_STATS_BY_PRODUCT = new Map();
+    if(Array.isArray(rows)) for(const r of rows) PRICE_STATS_BY_PRODUCT.set(r.product_id, {
+      min: Number(r.min_price), max: Number(r.max_price), count: r.observation_count,
+    });
+  }catch(e){ /* badge just won't show until a retry */ }
+}
+// A deal counts as "historiskt lågt pris" only when we've actually SEEN the
+// price move for this product (max > min -- otherwise every stable-priced
+// item would trivially qualify as "at its all-time low" the moment it's
+// scraped even once, which isn't a real signal). 2% slack on top of the
+// observed floor absorbs scraper rounding, not genuine price differences.
+function isHistoricLow(deal){
+  const pid = LINK_BY_KEY.get(`${deal.store}::${deal.product}`);
+  if(!pid) return false;
+  const stats = PRICE_STATS_BY_PRODUCT.get(pid);
+  if(!stats || !(stats.max > stats.min)) return false;
+  return deal.price <= stats.min * 1.02;
+}
 // Most chains only put brand/image on a minority of their own deals -- if
 // match-products has already linked this deal's raw text to a canonical
 // product that SOME other chain supplied brand/image for, borrow it here
@@ -882,6 +911,7 @@ async function loadCityDataInBackground(){
 async function loadCatalog(){
   catalogLoading = true; catalogError = null; render();
   loadStoreDirectory(); // national but lightweight -- fire-and-forget, doesn't block first paint
+  loadPriceStats().then(()=>render()); // re-render once loaded so badges appear without a manual refresh
   try{
     await loadAreas();
     await loadScopedFirst();
@@ -1260,6 +1290,7 @@ function offerCard(o){
   const hasDisc = save > 0.001;
   const pct = hasDisc && o.origPrice ? Math.round(save/o.origPrice*100) : 0;
   const added = inList(o.id);
+  const historicLow = isHistoricLow(o);
   const member = detectMember(o);
   const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
   let details = o.detail||'';
@@ -1316,6 +1347,7 @@ function offerCard(o){
         ${brandRow}
         <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:${metaParts.length?'1px':'5px'};">${esc(o.product)}</div>
         <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
+        ${historicLow?`<div style="display:inline-flex;align-items:center;gap:5px;background:#FBEAE2;border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🔥</span><span style="font-size:11.5px;font-weight:800;color:#C2431F;">Lägsta priset vi sett</span></div>`:''}
         ${memberBadge}
         ${cheaperRow}
         ${o.matchNote?`<div style="font-size:11px;color:#A67C3D;margin-top:6px;">🔎 ${esc(o.matchNote)}</div>`:''}
@@ -1340,9 +1372,11 @@ function viewOffers(){
   const chipDefs = ['Alla'].concat(present);
   const chips = chipDefs.map(c=>{ const a=cat===c;
     return `<button onclick="setCat('${c.replace(/'/g,"\\'")}')" style="padding:9px 15px;border-radius:12px;border:${a?'none':'1px solid #EFE6D8'};background:${a?'#E0552E':'#fff'};color:${a?'#fff':'#6A5E50'};font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;font-family:${FAM};flex:none;">${esc(c)}</button>`; }).join('');
-  const visible = cat==='Alla'? deals : deals.filter(o=>o.category===cat);
+  const byCat = cat==='Alla'? deals : deals.filter(o=>o.category===cat);
+  const visible = showHistoricLowOnly ? byCat.filter(isHistoricLow) : byCat;
   const shown = visible.slice(0, offersVisibleCount);
-  const grid = shown.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">Inga erbjudanden i denna kategori.</div>`;
+  const emptyMsg = showHistoricLowOnly ? 'Inga erbjudanden till lägsta pris just nu i denna kategori.' : 'Inga erbjudanden i denna kategori.';
+  const grid = shown.map(offerCard).join('') || `<div style="color:#8A7E6E;font-size:14px;padding:20px;">${emptyMsg}</div>`;
   const remaining = visible.length - shown.length;
   const moreBtn = remaining>0 ? `<button onclick="showMoreOffers()" style="width:100%;margin-top:16px;padding:14px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;color:#2A211A;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Visa fler (${Math.min(remaining,OFFERS_PAGE_SIZE)} till, ${remaining} kvar)</button>` : '';
   return `<div style="background:linear-gradient(135deg,#E0552E,#C2431F);border-radius:22px;padding:20px 22px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 12px 28px rgba(224,85,46,.26);margin-bottom:18px;">
@@ -1354,9 +1388,17 @@ function viewOffers(){
       <div style="font-size:48px;line-height:1;">🥕</div>
     </div>
     ${followedStoresStrip()}
-    <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px;">${chips}</div>
+    <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;">${chips}</div>
+    <button onclick="toggleHistoricLowFilter()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;border:${showHistoricLowOnly?'none':'1px solid #EFE6D8'};background:${showHistoricLowOnly?'#C2431F':'#fff'};color:${showHistoricLowOnly?'#fff':'#6A5E50'};font-weight:700;font-size:12.5px;font-family:${FAM};cursor:pointer;margin-bottom:16px;">🔥 ${showHistoricLowOnly?'Visar bara lägsta pris':'Visa bara lägsta pris'}</button>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;">${grid}</div>
     ${moreBtn}`;
+}
+function toggleHistoricLowFilter(){
+  showHistoricLowOnly = !showHistoricLowOnly;
+  localStorage.setItem('vf_show_historic_low', showHistoricLowOnly ? '1' : '0');
+  offersVisibleCount = OFFERS_PAGE_SIZE;
+  render();
+  track('historic_low_filter_toggled', { enabled: showHistoricLowOnly }, { area_id: currentAreaId });
 }
 // ── Butiker nära dig (postnummer/ort/geolocation sök) ────────
 // North-star feature: search any Swedish postnummer or ort and get the
