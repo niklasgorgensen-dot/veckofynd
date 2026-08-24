@@ -981,6 +981,35 @@ function storeLogo(st, size, radius){
   return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:#fff;border:1px solid #EFE6D8;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;padding:${Math.round(size*0.12)}px;box-sizing:border-box;"><img src="${st.logoUrl}" alt="${esc(st.name)}" loading="lazy" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.outerHTML='${fbEsc}'"></div>`;
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+// Unified line-icon set (real Lucide path data, inlined so the app stays a
+// single self-contained file -- no extra CDN script) -- replaces raw emoji
+// used AS ICONS in navigation/chrome so the whole app reads as one design
+// system instead of "however each platform happens to render emoji" (design
+// review 2026-08-24, P1: "byt bort emoji som ikoner"). Emoji used as actual
+// content -- category tags, celebratory badges like "🔥 Historiskt lägsta
+// pris" -- are a different thing and intentionally untouched here.
+const ICON_PATHS = {
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+  store: '<path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/><path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/><path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  list: '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+  chefhat: '<path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z"/><path d="M6 17h12"/>',
+  heartpulse: '<path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>',
+  trendingUp: '<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/>',
+  trendingDown: '<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>',
+  pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  receipt: '<path d="M12 17V7"/><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"/><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"/>',
+  target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  footprints: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/>',
+  piggybank: '<path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01"/><path d="M2 8v1a2 2 0 0 0 2 2h1"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+};
+function icon(name, size, opts){
+  opts = opts || {};
+  const s = size || 20;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${opts.strokeWidth||2}" stroke-linecap="round" stroke-linejoin="round" style="flex:none;display:inline-block;vertical-align:middle;${opts.style||''}">${ICON_PATHS[name]||''}</svg>`;
+}
 function kr(n){ if(n==null||isNaN(n)) return '0 kr'; return (Number.isInteger(n)? String(n) : Number(n).toFixed(2).replace('.',',')) + ' kr'; }
 function unitSuffix(u){ return u==='kg'?'/kg':u==='liter'?'/liter':u==='st'?'/st':u==='förp'?'/st':''; }
 function isPerUnitDiscount(u){ return u==='st'||u==='förp'; }
@@ -1271,10 +1300,10 @@ async function submitOffer(){
 const FAM="'Hanken Grotesk',sans-serif", DISP="'Bricolage Grotesque',sans-serif";
 const PAGE='max-width:1080px;margin:0 auto;padding:clamp(16px,4vw,28px);';
 
-function navBtn(key,label){
+function navBtn(key,iconName,label){
   const active = tab===key;
   const badge = key==='lista'&&listItems.length ? ' · '+listItems.length : '';
-  return `<button onclick="go('${key}')" style="flex:none;padding:10px 14px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label}${badge}</button>`;
+  return `<button onclick="go('${key}')" style="flex:none;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:13px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${icon(iconName,16)}${label}${badge}</button>`;
 }
 function areaSwitcher(){
   const areasInCity = AREAS.filter(a=>a.city_id===currentCityId);
@@ -1308,12 +1337,12 @@ function header(){
       </div>
       <div style="flex:none;margin-left:auto;display:flex;align-items:center;gap:8px;">
         ${areaSwitcher()}
-        <button onclick="openSheet('vara')" style="width:42px;height:42px;flex:none;border-radius:13px;border:1px solid #EFE6D8;background:#fff;font-size:19px;cursor:pointer;">🧾</button>
+        <button onclick="openSheet('vara')" style="width:42px;height:42px;flex:none;border-radius:13px;border:1px solid #EFE6D8;background:#fff;color:#6A5E50;display:flex;align-items:center;justify-content:center;cursor:pointer;">${icon('receipt',19)}</button>
       </div>
     </div>
     ${headerSearchBar()}
     <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}${navBtn('halsa','💪 Hälsa')}${navBtn('priser','📈 Priser')}
+      ${navBtn('erbjudanden','tag','Erbjudanden')}${navBtn('butiker','store','Butiker')}${navBtn('bevaka','eye','Bevaka')}${navBtn('lista','list','Lista')}${navBtn('recept','chefhat','Recept')}${navBtn('halsa','heartpulse','Hälsa')}${navBtn('priser','trendingUp','Priser')}
     </nav>
   </header>`;
 }
@@ -1414,7 +1443,7 @@ function offerCard(o){
   const added = inList(o.id);
   const historicLow = isHistoricLow(o);
   const member = detectMember(o);
-  const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
+  const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;color:${member.color};">${icon('tag',13)}<span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
   let details = o.detail||'';
   // Surface the real total quantity ("6 × 33 cl · 1,98 L totalt") as its own
   // clean badge instead of leaving it buried as a raw "6x33 cl" fragment
@@ -1463,7 +1492,7 @@ function offerCard(o){
   // pinned to the same bottom edge on every card.
   const addStyle = added
     ? `width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:1px solid #CFE0C2;background:#EAF1E3;color:#3E6632;cursor:default;`
-    : `width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#2A211A;color:#fff;cursor:pointer;`;
+    : `width:100%;padding:11px;border-radius:13px;font-weight:700;font-size:14px;font-family:${FAM};border:none;background:#E0552E;color:#fff;cursor:pointer;`;
   const metaParts = [];
   if(o.brand) metaParts.push(esc(o.brand));
   if(o.origin) metaParts.push(`📍 ${esc(o.origin)}`);
@@ -1515,7 +1544,7 @@ function viewOffers(){
         <div style="font-family:${DISP};font-weight:800;font-size:clamp(30px,7.5vw,42px);line-height:1;margin-top:4px;">${kr(totalSave)}</div>
         <div style="font-size:13px;opacity:.92;margin-top:7px;">${deals.length} erbjudanden ${followedStoreIds.size?`från ${followedStoreIds.size} valda butiker`:`i ${esc(currentAreaName)}`}</div>
       </div>
-      <div style="font-size:48px;line-height:1;">🥕</div>
+      <div style="opacity:.85;">${icon('piggybank',44,{strokeWidth:1.6})}</div>
     </div>
     ${followedStoresStrip()}
     <div class="vf-sc" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;">${chips}</div>
@@ -1689,7 +1718,7 @@ function viewStores(){
       return storeCard(st, dealsLoadedFor.has(st.id)?count:null, save, top, followedStoreIds.has(st.id), dist);
     }).join('');
     return `<div style="margin-bottom:16px;"><div style="font-family:${DISP};font-weight:800;font-size:23px;letter-spacing:-.01em;">${storeSearchResults.length} butiker nära ${esc(originLabel)}</div><div style="font-size:13.5px;color:#8A7E6E;margin-top:2px;">Sorterat efter avstånd — klicka "Följ" för att se erbjudanden härifrån i Erbjudanden-fliken, oavsett vilket område de ligger i.</div>
-      <button onclick="setMyAreaFromSearch()" style="margin-top:10px;padding:10px 16px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">📍 Använd ${esc(originLabel.split(' ')[0])} som mitt område</button>
+      <button onclick="setMyAreaFromSearch()" style="margin-top:10px;padding:10px 16px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">📍 Använd ${esc(originLabel.split(' ')[0])} som mitt område</button>
     </div>
       ${searchBox}
       <div id="vf-map" style="height:280px;border-radius:20px;overflow:hidden;margin-bottom:18px;border:1px solid #EFE6D8;background:#EFE7DA;"></div>
@@ -1936,11 +1965,11 @@ function householdPanel(){
     ${memberRows}${inviteRows}
     ${total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
       <input id="new_member_name" placeholder="namn (t.ex. barn utan eget konto)" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;" onkeydown="if(event.key==='Enter')addHouseholdMember()">
-      <button onclick="addHouseholdMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Lägg till</button>
+      <button onclick="addHouseholdMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#E0552E;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Lägg till</button>
     </div>` : ''}
     ${isOwner && total<5 ? `<div style="display:flex;gap:8px;margin-top:10px;">
       <input id="invite_email" type="email" placeholder="familjemedlems mail (eget konto)" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
-      <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
+      <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#E0552E;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
     </div>` : (total>=5 ? `<div style="margin-top:8px;font-size:12px;color:#8A7E6E;">Hushållet är fullt (max 5).</div>` : '')}
   </div>`;
 }
@@ -2108,7 +2137,7 @@ function renderSearchResults(){
     const already = inList(best.id);
     const btn = already
       ? `<span style="font-size:11px;color:#4F7A3F;font-weight:700;">✓ Tillagd</span>`
-      : `<button onclick="addSearchHit(${best.id})" style="padding:5px 12px;border:none;border-radius:9px;background:#2A211A;color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">+ Lägg till</button>`;
+      : `<button onclick="addSearchHit(${best.id})" style="padding:5px 12px;border:none;border-radius:9px;background:#E0552E;color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">+ Lägg till</button>`;
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F3ECDF;">
       <span style="font-size:20px;">${best.emoji||'🛒'}</span>
       <div style="flex:1;min-width:0;">
@@ -2169,12 +2198,12 @@ function viewWatchlist(){
   }
   const matchCount = watchlist.filter(w=>matchDealsForTerm(w.term).length>0).length;
   const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
-      <div style="font-size:13px;opacity:.92;font-weight:600;">👁️ Bevakningar</div>
+      <div style="font-size:13px;opacity:.92;font-weight:600;display:flex;align-items:center;gap:6px;">${icon('eye',15)}Bevakningar</div>
       <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">${watchlist.length?`${matchCount} av ${watchlist.length} bevakade varor matchar veckans erbjudanden.`:'Bevaka en vara eller ett varumärke — vi visar direkt när den går på extrapris.'}</div>
     </div>`;
   const addBox = `<div style="display:flex;gap:8px;margin-bottom:16px;">
       <input id="watch_term" placeholder="t.ex. kycklingfilé, kaffe, laxfilé…" style="${inputStyle()}" onkeydown="if(event.key==='Enter')addWatchTerm()">
-      <button onclick="addWatchTerm()" style="flex:none;padding:0 18px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bevaka</button>
+      <button onclick="addWatchTerm()" style="flex:none;padding:0 18px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Bevaka</button>
     </div>`;
   const rows = watchlist.length ? watchlist.map(watchItemRow).join('') :
     `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">
@@ -2326,7 +2355,7 @@ function viewWeeklyMenu(){
     ${rows}
     <div style="display:flex;gap:10px;margin-top:6px;">
       <button onclick="buildWeeklyMenu()" style="flex:1;padding:14px;border-radius:14px;border:1px solid #EFE6D8;background:#fff;color:#2A211A;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">🎲 Nytt förslag</button>
-      <button onclick="addMenuToShoppingList()" style="flex:1;padding:14px;border-radius:14px;border:none;background:#2A211A;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">📋 Lägg till alla varor i listan</button>
+      <button onclick="addMenuToShoppingList()" style="flex:1;padding:14px;border-radius:14px;border:none;background:#E0552E;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};display:inline-flex;align-items:center;justify-content:center;gap:7px;">${icon('list',16)}Lägg till alla varor i listan</button>
     </div>
     <button onclick="showWeeklyMenu=false; render();" style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:transparent;color:#8A7E6E;font-weight:600;font-size:13px;cursor:pointer;font-family:${FAM};">← Tillbaka till alla recept</button>`;
 }
@@ -2358,7 +2387,7 @@ function viewHealth(){
       <div style="font-size:12px;opacity:.85;margin-top:3px;">${esc(strategyLabel)}</div>
     </div>` : `<div style="margin-top:16px;background:rgba(255,255,255,.14);border-radius:14px;padding:12px 14px;font-size:13px;">Inget kalorimål aktivt just nu — <span style="text-decoration:underline;cursor:pointer;" onclick="openGoalForm()">lägg till ett</span> om du vill spåra kalorier.</div>`;
   const dashboard = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
-    <div style="font-size:13px;opacity:.92;font-weight:600;">💪 Idag</div>
+    <div style="font-size:13px;opacity:.92;font-weight:600;display:flex;align-items:center;gap:6px;">${icon('heartpulse',15)}Idag</div>
     <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;">
       <div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${eatenKcal}</div><div style="font-size:11px;opacity:.85;">${goalKcal!=null?'av '+goalKcal+' kcal':'kcal ätit'}</div></div>
       ${proteinTarget!=null?`<div><div style="font-size:24px;font-weight:800;font-family:${DISP};">${Math.round(eatenProtein)}</div><div style="font-size:11px;opacity:.85;">av ${proteinTarget}g protein</div></div>`:''}
@@ -2403,19 +2432,19 @@ function viewHealth(){
       </label>
       <div style="display:flex;gap:10px;">
         <button onclick="closeGoalForm()" style="flex:none;padding:12px 16px;border:1px solid #E3D8C6;border-radius:12px;background:#fff;color:#6A5E50;font-weight:700;font-size:14px;font-family:${FAM};cursor:pointer;">Avbryt</button>
-        <button onclick="saveNewGoal()" style="flex:1;padding:12px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Lägg till mål</button>
+        <button onclick="saveNewGoal()" style="flex:1;padding:12px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Lägg till mål</button>
       </div>
     </div>` : `<button onclick="openGoalForm()" style="width:100%;margin-top:10px;padding:12px;border:1px dashed #E0D5C2;border-radius:12px;background:transparent;color:#6A5E50;font-weight:700;font-size:13.5px;cursor:pointer;font-family:${FAM};">+ Lägg till mål</button>`;
   const activeGoals = memberGoals.filter(g=>g.status==='active'), pausedGoals = memberGoals.filter(g=>g.status==='paused');
   const goalsPanel = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:4px;">🎯 Mina mål</div>
+    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:6px;">${icon('target',16)}Mina mål</div>
     <div style="font-size:12px;color:#8A7E6E;margin-bottom:8px;">Mål är förslag, inte regler — pausa eller ändra när som helst.</div>
     ${(activeGoals.length||pausedGoals.length) ? activeGoals.map(goalRow).join('')+pausedGoals.map(goalRow).join('') : `<div style="font-size:13px;color:#8A7E6E;padding:8px 0;">Inga mål ännu.</div>`}
     ${goalForm}
   </div>`;
 
   const activityForm = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:14px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:4px;">🏃 Logga dagens aktivitet</div>
+    <div style="font-weight:800;font-family:${DISP};font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:6px;">${icon('footprints',16)}Logga dagens aktivitet</div>
     <div style="font-size:12px;color:#8A7E6E;margin-bottom:12px;">Manuellt idag — samma fält kopplas automatiskt till Apple Health/Garmin/Health Connect den dagen en sådan integration finns.</div>
     <div style="display:flex;gap:10px;margin-bottom:10px;">
       <label style="flex:1;">${lbl('Steg')}<input id="act_steps" type="number" value="${todayActivity.steps||''}" style="${inputStyle()}"></label>
@@ -2425,7 +2454,7 @@ function viewHealth(){
       <label style="flex:1;">${lbl('Träningsminuter')}<input id="act_workout_min" type="number" value="${todayActivity.workoutMinutes||''}" style="${inputStyle()}"></label>
       <label style="flex:1;">${lbl('Vikt (kg, valfritt)')}<input id="act_weight" type="number" step="0.1" value="${todayActivity.weight||''}" style="${inputStyle()}"></label>
     </div>
-    <button onclick="saveTodayActivity()" style="width:100%;padding:12px;border:none;border-radius:12px;background:#2A211A;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Spara aktivitet</button>
+    <button onclick="saveTodayActivity()" style="width:100%;padding:12px;border:none;border-radius:12px;background:#E0552E;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:${FAM};">Spara aktivitet</button>
   </div>`;
 
   const foodRows = todayFoodLogs.map(f=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F3ECDF;">
@@ -2470,7 +2499,7 @@ function viewHealth(){
       </div>
     </div>`).join('');
   const suggestSection = `<div style="margin-bottom:6px;">
-    <div style="font-weight:800;font-family:${DISP};font-size:16px;margin-bottom:10px;">${hasKcalTarget?'🍳 Middagar som passar ditt mål':'🍳 Middagsförslag'}</div>
+    <div style="font-weight:800;font-family:${DISP};font-size:16px;margin-bottom:10px;display:flex;align-items:center;gap:7px;">${icon('chefhat',17)}${hasKcalTarget?'Middagar som passar ditt mål':'Middagsförslag'}</div>
     ${RECIPES.length===0 ? `<div style="text-align:center;padding:24px 20px;color:#8A7E6E;font-size:13.5px;">Inga recept genererade för ${esc(currentAreaName)} än.</div>` : (suggestRows || `<div style="text-align:center;padding:24px 20px;color:#8A7E6E;font-size:13.5px;">Inga recept matchar just nu.</div>`)}
   </div>`;
 
@@ -2491,7 +2520,7 @@ function viewRecipes(){
     return `<button onclick="setRecipeCat('${c}')" style="flex:none;padding:9px 14px;border-radius:12px;border:${active?'none':'1px solid #EFE6D8'};background:${active?'#2A211A':'#fff'};color:${active?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${label} (${count})</button>`;
   }).join('');
   const intro = `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(79,122,63,.26);">
-      <div style="font-size:13px;opacity:.92;font-weight:600;">🍳 ${RECIPES.length} recept från veckans erbjudanden i ${esc(currentAreaName)}</div>
+      <div style="font-size:13px;opacity:.92;font-weight:600;display:flex;align-items:center;gap:6px;">${icon('chefhat',15)}${RECIPES.length} recept från veckans erbjudanden i ${esc(currentAreaName)}</div>
       <div style="font-size:13.5px;opacity:.92;margin-top:6px;line-height:1.5;">40 recept i 4 kategorier genereras automatiskt varje måndag utifrån det som faktiskt är på extrapris just den här veckan — inte alla mallar hittar en match varje vecka.</div>
       <button onclick="showWeeklyMenu=true; render();" style="margin-top:12px;padding:11px 16px;border-radius:12px;border:none;background:#fff;color:#3E6632;font-weight:800;font-size:13px;cursor:pointer;font-family:${FAM};">🗓️ Bygg veckomeny</button>
     </div>`;
@@ -2736,7 +2765,7 @@ function viewPriceTrends(){
       <button onclick="searchPriceTrend()" style="flex:none;padding:10px 16px;border-radius:11px;border:none;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Sök</button>
     </div>`;
   const intro = `<div style="background:linear-gradient(135deg,#2A211A,#443627);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(42,33,26,.24);">
-      <div style="font-size:13px;opacity:.9;font-weight:600;">📈 Prisutveckling</div>
+      <div style="font-size:13px;opacity:.9;font-weight:600;display:flex;align-items:center;gap:6px;">${icon('trendingUp',15)}Prisutveckling</div>
       <div style="font-size:13.5px;opacity:.9;margin-top:6px;line-height:1.5;">Sök på en vara för att se hur priset förändrats över tid — jämför ett specifikt märke eller alla märken generellt.</div>
     </div>`;
 
@@ -2752,8 +2781,8 @@ function viewPriceTrends(){
       ${PRICE_TREND_RANGES.map(m=>`<button onclick="setPriceTrendRange(${m})" style="flex:none;padding:9px 14px;border-radius:12px;border:${priceTrendRangeMonths===m?'none':'1px solid #EFE6D8'};background:${priceTrendRangeMonths===m?'#2A211A':'#fff'};color:${priceTrendRangeMonths===m?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${priceTrendRangeLabel(m)}</button>`).join('')}
     </div>`;
   const modeToggle = priceTrendMatches.length>1 ? `<div style="display:flex;background:#F0E8DA;border-radius:14px;padding:4px;margin-bottom:14px;">
-      <button onclick="setPriceTrendMode('all')" style="${seg(priceTrendMode==='all')}">🌍 Alla märken (${priceTrendMatches.length})</button>
-      <button onclick="setPriceTrendMode('one','${priceTrendSelectedId||priceTrendMatches[0].id}')" style="${seg(priceTrendMode==='one')}">🏷️ Ett märke</button>
+      <button onclick="setPriceTrendMode('all')" style="${seg(priceTrendMode==='all')}display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('globe',15)}Alla märken (${priceTrendMatches.length})</button>
+      <button onclick="setPriceTrendMode('one','${priceTrendSelectedId||priceTrendMatches[0].id}')" style="${seg(priceTrendMode==='one')}display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('tag',15)}Ett märke</button>
     </div>` : '';
   const pickerSpecs = priceTrendResult && priceTrendResult.packByProduct;
   const onePicker = priceTrendMode==='one' && priceTrendMatches.length>1 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;" class="vf-sc">
@@ -2779,9 +2808,10 @@ function viewPriceTrends(){
   </div>`;
 
   const volLabel = r.cv<0.05?'Stabilt pris':r.cv<0.15?'Måttligt varierande pris':'Volatilt pris';
-  const trendLabel = Math.abs(r.slopePerMonth)<0.05 ? 'Ingen tydlig trend' : `${r.slopePerMonth>0?'📈':'📉'} Trend: ${r.slopePerMonth>=0?'+':''}${r.slopePerMonth.toFixed(2)} kr/månad`;
+  const trendIcon = Math.abs(r.slopePerMonth)<0.05 ? '' : icon(r.slopePerMonth>0?'trendingUp':'trendingDown',14,{style:'margin-right:5px;'});
+  const trendLabel = Math.abs(r.slopePerMonth)<0.05 ? 'Ingen tydlig trend' : `Trend: ${r.slopePerMonth>=0?'+':''}${r.slopePerMonth.toFixed(2)} kr/månad`;
   const trendRow = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-      <div style="font-size:12.5px;font-weight:700;color:#6A5E50;background:#fff;border:1px solid #EFE6D8;border-radius:11px;padding:8px 13px;">${trendLabel}</div>
+      <div style="font-size:12.5px;font-weight:700;color:#6A5E50;background:#fff;border:1px solid #EFE6D8;border-radius:11px;padding:8px 13px;display:inline-flex;align-items:center;">${trendIcon}${trendLabel}</div>
       <div style="font-size:12.5px;font-weight:700;color:#6A5E50;background:#fff;border:1px solid #EFE6D8;border-radius:11px;padding:8px 13px;">${volLabel}</div>
       ${r.excluded>0?`<div style="font-size:12.5px;font-weight:700;color:#A67C3D;background:#F8F1E3;border-radius:11px;padding:8px 13px;">${r.excluded} observationer uteslutna (annan prisenhet)</div>`:''}
     </div>`;
@@ -2839,12 +2869,12 @@ function sheetView(){
     <div onclick="event.stopPropagation()" style="width:100%;max-width:520px;background:#FBF6EE;border-radius:26px 26px 0 0;padding:18px clamp(16px,4vw,24px) 30px;animation:vfSheet .3s cubic-bezier(.22,1,.36,1);max-height:92vh;overflow:auto;">
       <div style="width:40px;height:4px;background:#E0D5C2;border-radius:3px;margin:0 auto 16px;"></div>
       <div style="display:flex;background:#F0E8DA;border-radius:14px;padding:4px;margin-bottom:8px;">
-        <button onclick="setMode('erbjudande')" style="${seg(erb)}">🏷️ Erbjudande</button>
-        <button onclick="setMode('vara')" style="${seg(!erb)}">🛒 Egen vara</button>
+        <button onclick="setMode('erbjudande')" style="${seg(erb)}display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('tag',15)}Erbjudande</button>
+        <button onclick="setMode('vara')" style="${seg(!erb)}display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('cart',15)}Egen vara</button>
       </div>${body}
     </div></div>`;
 }
-function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">✏️ Erbjudande</button>`; }
+function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">${icon('pencil',18)}Erbjudande</button>`; }
 
 function render(){
   const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():tab==='bevaka'?viewWatchlist():tab==='halsa'?viewHealth():tab==='priser'?viewPriceTrends():viewList();
