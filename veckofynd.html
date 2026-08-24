@@ -1359,6 +1359,45 @@ function detectMember(o){
   if(o.member)                                             return {label:'Kräver medlemskap',color:'#4A4A4A',bg:'#EBEBEB'};
   return null;
 }
+// Multi-pack notation ("6-pack", "4-pack") in product/detail text already
+// carries the real per-item size right next to it in the scraped data (e.g.
+// "6x33 cl · Alkoholfri öl Lager 0.5% 6-pack, ...") -- checked every current
+// "-pack" deal in the database and every single one already has an "AxB
+// unit" fragment somewhere in product/detail, so nothing needs to be
+// invented, only parsed out and surfaced cleanly instead of buried inside a
+// long comma-separated flavor list (Niklas: "jag vill att det ska antal
+// centiliter osv ... mer specificerade"). Used for both erbjudanden
+// (offerCard, from live deal text) and statistik (price trend panel, from
+// price_observations text) -- same parser, same source-of-truth text.
+function parsePackSpec(text){
+  if(!text) return null;
+  const m = String(text).match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|liter|ml|cl|dl|l)\b/i);
+  if(!m) return null;
+  const count = parseInt(m[1],10);
+  const size = parseFloat(m[2].replace(',','.'));
+  const unit = m[3].toLowerCase();
+  if(!count || !size) return null;
+  let totalMl=null, totalG=null;
+  if(unit==='g') totalG = count*size;
+  else if(unit==='kg') totalG = count*size*1000;
+  else if(unit==='ml') totalMl = count*size;
+  else if(unit==='cl') totalMl = count*size*10;
+  else if(unit==='dl') totalMl = count*size*100;
+  else if(unit==='l'||unit==='liter') totalMl = count*size*1000;
+  return { count, size, unit, totalMl, totalG };
+}
+function formatPackSpec(p){
+  if(!p) return null;
+  const perUnit = `${String(p.size).replace('.',',')} ${p.unit}`;
+  let totalTxt;
+  if(p.totalG!=null){
+    totalTxt = p.totalG>=1000 ? `${(p.totalG/1000).toLocaleString('sv-SE',{maximumFractionDigits:2})} kg` : `${Math.round(p.totalG)} g`;
+  } else if(p.totalMl!=null){
+    totalTxt = p.totalMl>=1000 ? `${(p.totalMl/1000).toLocaleString('sv-SE',{maximumFractionDigits:2})} L`
+      : p.unit==='ml' ? `${Math.round(p.totalMl)} ml` : `${Math.round(p.totalMl/10)} cl`;
+  } else return null;
+  return `${p.count} × ${perUnit} · ${totalTxt} totalt`;
+}
 function dealImage(o, size){
   size = size || 64;
   const bg = CAT_BG[o.category] || '#EFE7DA';
@@ -1377,6 +1416,13 @@ function offerCard(o){
   const member = detectMember(o);
   const memberBadge = member ? `<div style="display:inline-flex;align-items:center;gap:5px;background:${member.bg};border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🏷️</span><span style="font-size:11.5px;font-weight:800;color:${member.color};">${esc(member.label)}</span></div>` : '';
   let details = o.detail||'';
+  // Surface the real total quantity ("6 × 33 cl · 1,98 L totalt") as its own
+  // clean badge instead of leaving it buried as a raw "6x33 cl" fragment
+  // inside a long comma-separated flavor list -- then strip that now-
+  // redundant fragment out of the free-text detail line so it isn't shown
+  // twice.
+  const packSpec = parsePackSpec(o.detail) || parsePackSpec(o.product);
+  if(packSpec) details = details.replace(/\d+\s*[x×]\s*\d+(?:[.,]\d+)?\s*(kg|g|liter|ml|cl|dl|l)\b\s*·?\s*/i, '').trim();
   if(o.validTo){
     const WD=['sön','mån','tis','ons','tor','fre','lör'];
     const vt=new Date(o.validTo+'T00:00:00'); const today=new Date(); today.setHours(0,0,0,0);
@@ -1390,7 +1436,7 @@ function offerCard(o){
   // itself (Niklas: "visa erbjudandet som det är"). o.price is still the
   // correct per-item figure internally (sorting, cheaper-elsewhere), so it's
   // shown small as a "≈" hint when there's no separate jämförpris already.
-  const jmfRow = showJmf ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">Jämförpris ${kr(o.jamforpris)} ${esc(o.jamforenhet||'')}</div>`
+  const jmfRow = showJmf ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">Jämförpris ${String(o.jamforpris).replace('.',',')} ${esc(o.jamforenhet||'')}</div>`
     : (o.promoLabel ? `<div style="font-size:11px;color:#8A7E6E;margin-top:2px;">≈ ${kr(o.price)}${unitSuffix(o.unit)}</div>` : '');
   const cheaperRow = o.cheaperElsewhere ? `<div style="display:inline-flex;align-items:center;gap:5px;background:#EAF1E3;border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:12px;">💡</span><span style="font-size:11.5px;font-weight:700;color:#3E6632;">Billigare hos ${esc(o.cheaperElsewhere.storeName)}: ${kr(o.cheaperElsewhere.price)}${unitSuffix(o.cheaperElsewhere.unit)}</span></div>` : '';
   const priceMain = o.promoLabel
@@ -1429,7 +1475,8 @@ function offerCard(o){
         <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.05em;">${storeLogo(st,16,5)}${esc(st.name)}${o.dist!=null?` · ${o.dist<10?o.dist.toFixed(1).replace('.',','):Math.round(o.dist)} km`:''}</span>
         ${brandRow}
         <div style="font-family:${DISP};font-weight:700;font-size:16px;line-height:1.15;margin-top:${metaParts.length?'1px':'5px'};">${esc(o.product)}</div>
-        <div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>
+        ${details?`<div style="font-size:12.5px;color:#8A7E6E;margin-top:2px;">${esc(details)}</div>`:''}
+        ${packSpec?`<div style="display:inline-flex;align-items:center;gap:5px;background:#F5EFE2;border-radius:9px;padding:4px 9px;margin-top:6px;"><span style="font-size:11px;">📦</span><span style="font-size:11px;font-weight:700;color:#6A5E50;">${esc(formatPackSpec(packSpec))}</span></div>`:''}
         ${historicLow?`<div style="display:inline-flex;align-items:center;gap:5px;background:#FBEAE2;border-radius:9px;padding:5px 10px;margin-top:7px;"><span style="font-size:13px;">🔥</span><span style="font-size:11.5px;font-weight:800;color:#C2431F;">Lägsta priset vi sett</span></div>`:''}
         ${memberBadge}
         ${cheaperRow}
@@ -2522,7 +2569,7 @@ async function loadPriceTrendSeries(){
   try{
     const ids = priceTrendMatches.map(p=>p.id);
     const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-priceTrendRangeMonths);
-    const cols = 'product_id,price,jamforpris,jamforenhet,unit,observed_at';
+    const cols = 'product_id,product,detail,price,jamforpris,jamforenhet,unit,observed_at';
     const rows = await supa.fetchAllPaginated(`price_observations?select=${cols}&product_id=in.(${ids.join(',')})&observed_at=gte.${cutoff.toISOString()}&order=observed_at.asc`);
     priceTrendRawRows = Array.isArray(rows) ? rows : [];
   }catch(e){
@@ -2534,18 +2581,39 @@ async function loadPriceTrendSeries(){
 // jämförpris (kr/kg, kr/l, kr/st) is preferred over raw sticker price for the
 // exact same reason the recipe engine's estimateRoleCost() prefers it -- raw
 // price on a "st" deal is a whole-package price that isn't comparable across
-// different package sizes. Falls back to unit-derived price only when a row
-// has no jämförpris at all.
+// different package sizes. When a row has no store-provided jämförpris but
+// its text parses as a pack ("6x33 cl"), derive one from the parsed total
+// quantity instead of falling straight to raw price/st -- otherwise a single
+// can (6 kr/st) and a 30-pack (135 kr/st) silently land in the same "kr/st"
+// bucket and get averaged/trended together as if directly comparable, which
+// is exactly the kind of imprecision Niklas flagged ("mer specificerade").
+// Raw price/unit is now the last resort, only for genuinely un-parseable
+// single items.
 function comparablePrice(row){
   if(row.jamforpris!=null && row.jamforenhet) return { value:Number(row.jamforpris), unit: row.jamforenhet };
+  const spec = parsePackSpec(row.detail) || parsePackSpec(row.product);
+  const price = Number(row.price);
+  if(spec && price>0){
+    if(spec.totalMl) return { value: Math.round((price/spec.totalMl*1000)*100)/100, unit:'kr/l' };
+    if(spec.totalG) return { value: Math.round((price/spec.totalG*1000)*100)/100, unit:'kr/kg' };
+  }
   const u = row.unit==='kg'?'kr/kg':row.unit==='liter'?'kr/l':'kr/st';
-  return { value:Number(row.price), unit: u };
+  return { value:price, unit: u };
 }
 function recomputePriceTrendResult(){
   if(!priceTrendRawRows){ priceTrendResult = null; render(); return; }
+  // Built from the FULL match set, never the mode-filtered rows below --
+  // otherwise switching to "Ett märke" for one product would wipe out the
+  // pack-size labels shown for every OTHER product in the picker list.
+  const packByProduct = new Map();
+  for(const raw of priceTrendRawRows){
+    if(packByProduct.has(raw.product_id)) continue;
+    const spec = parsePackSpec(raw.detail) || parsePackSpec(raw.product);
+    packByProduct.set(raw.product_id, spec ? formatPackSpec(spec) : null);
+  }
   let rows = priceTrendRawRows;
   if(priceTrendMode==='one' && priceTrendSelectedId) rows = rows.filter(r=>r.product_id===priceTrendSelectedId);
-  if(!rows.length){ priceTrendResult = { empty:true }; render(); return; }
+  if(!rows.length){ priceTrendResult = { empty:true, packByProduct }; render(); return; }
 
   // Never blend incompatible units into one average (e.g. kr/kg meat with
   // kr/st cans) -- only the dominant unit among the matches is used; the rest
@@ -2605,12 +2673,12 @@ function recomputePriceTrendResult(){
   const productMeta = new Map((priceTrendMatches||[]).map(p=>[p.id,p]));
   const brandRows = [...byProduct.entries()].map(([pid,r])=>{
     const meta = productMeta.get(pid) || {};
-    return { id:pid, name:meta.canonical_name||'Okänd produkt', brand:meta.brand||null, price:r.cmp.value, unit:r.cmp.unit };
+    return { id:pid, name:meta.canonical_name||'Okänd produkt', brand:meta.brand||null, price:r.cmp.value, unit:r.cmp.unit, packSpec: packByProduct.get(pid)||null };
   }).sort((a,b)=>a.price-b.price);
 
   const earliestDataDate = priceTrendRawRows.reduce((min,r)=> r.observed_at<min?r.observed_at:min, priceTrendRawRows[0].observed_at).slice(0,10);
 
-  priceTrendResult = { empty:false, daily, ma, dominantUnit, excluded, first, last, periodMinRow, periodMaxRow, periodAvg:yMean, changeAbs, changePct, slopePerMonth, cv, brandRows, earliestDataDate };
+  priceTrendResult = { empty:false, daily, ma, dominantUnit, excluded, first, last, periodMinRow, periodMaxRow, periodAvg:yMean, changeAbs, changePct, slopePerMonth, cv, brandRows, packByProduct, earliestDataDate };
   render();
 }
 function priceTrendChartSvg(result){
@@ -2687,8 +2755,9 @@ function viewPriceTrends(){
       <button onclick="setPriceTrendMode('all')" style="${seg(priceTrendMode==='all')}">🌍 Alla märken (${priceTrendMatches.length})</button>
       <button onclick="setPriceTrendMode('one','${priceTrendSelectedId||priceTrendMatches[0].id}')" style="${seg(priceTrendMode==='one')}">🏷️ Ett märke</button>
     </div>` : '';
+  const pickerSpecs = priceTrendResult && priceTrendResult.packByProduct;
   const onePicker = priceTrendMode==='one' && priceTrendMatches.length>1 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;" class="vf-sc">
-      ${priceTrendMatches.map(p=>`<button onclick="setPriceTrendMode('one','${p.id}')" style="flex:none;padding:8px 12px;border-radius:11px;border:${priceTrendSelectedId===p.id?'none':'1px solid #EFE6D8'};background:${priceTrendSelectedId===p.id?'#2A211A':'#fff'};color:${priceTrendSelectedId===p.id?'#fff':'#6A5E50'};font-weight:700;font-size:12.5px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${p.brand?esc(p.brand)+' · ':''}${esc(p.canonical_name)}</button>`).join('')}
+      ${priceTrendMatches.map(p=>{ const spec = pickerSpecs && pickerSpecs.get(p.id); return `<button onclick="setPriceTrendMode('one','${p.id}')" style="flex:none;padding:8px 12px;border-radius:11px;border:${priceTrendSelectedId===p.id?'none':'1px solid #EFE6D8'};background:${priceTrendSelectedId===p.id?'#2A211A':'#fff'};color:${priceTrendSelectedId===p.id?'#fff':'#6A5E50'};font-weight:700;font-size:12.5px;cursor:pointer;font-family:${FAM};white-space:nowrap;text-align:left;">${p.brand?esc(p.brand)+' · ':''}${esc(p.canonical_name)}${spec?`<div style="font-weight:600;font-size:11px;opacity:.75;margin-top:1px;">${esc(spec)}</div>`:''}</button>`; }).join('')}
     </div>` : '';
 
   if(priceTrendSeriesLoading || !priceTrendResult) return intro + searchBar + rangeSel + modeToggle + onePicker + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Laddar prishistorik…</div>`;
@@ -2724,6 +2793,7 @@ function viewPriceTrends(){
           <div style="flex:1;min-width:0;">
             <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</div>
             ${b.brand?`<div style="font-size:11px;color:#A67C3D;font-weight:700;">${esc(b.brand)}</div>`:''}
+            ${b.packSpec?`<div style="font-size:10.5px;color:#8A7E6E;margin-top:1px;">📦 ${esc(b.packSpec)}</div>`:''}
           </div>
           <div style="flex:none;font-family:${DISP};font-weight:800;font-size:15px;color:${i===0?'#3E6632':'#2A211A'};">${kr(b.price)}${priceTrendUnitSuffix(b.unit)}</div>
         </div>`).join('')}
