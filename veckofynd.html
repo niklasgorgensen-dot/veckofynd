@@ -141,7 +141,7 @@ let household = null, householdMembers = [], householdInvites = [];
 async function loadAuthAndHousehold(isRetry){
   const { data } = await sbAuth.auth.getSession();
   session = data.session || null;
-  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; currentMemberId=null; memberGoals=[]; todayActivity=null; todayFoodLogs=[]; render(); return; }
+  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; currentMemberId=null; memberGoals=[]; todayActivity=null; todayFoodLogs=[]; householdActivity=[]; cumulativeSavings=null; cumulativeSavingsSince=null; render(); return; }
   householdLoadError = false;
   try{
     const mems = await supa.selectRaw('household_members?select=*');
@@ -176,6 +176,66 @@ async function loadAuthAndHousehold(isRetry){
   loadMemberGoals();
   loadTodayActivity();
   loadTodayFoodLogs();
+  loadHouseholdActivity();
+  loadCumulativeSavings();
+}
+// ── Hushålls-aktivitet & ackumulerad sparräknare ─────────────
+// Review 2026-08-24 P2/P3: both are pure display on top of data the app
+// already computes every week -- "Veckans potential" (see viewOffers) just
+// gets thrown away instead of kept, and item add/remove already happens
+// through addOffer()/submitCustom()/removeItem(). Deliberately a small
+// dedicated table rather than reusing analytics_events for the activity
+// feed -- analytics_events has no client SELECT policy by design (internal
+// telemetry sink), and future analytics properties shouldn't leak to other
+// household members just because this feature wants to read *some* of them.
+let householdActivity = [];
+async function loadHouseholdActivity(){
+  if(!household){ householdActivity=[]; return; }
+  try{
+    const rows = await supa.selectRaw(`household_activity?select=*&household_id=eq.${household.id}&order=created_at.desc&limit=8`);
+    householdActivity = Array.isArray(rows) ? rows : [];
+  }catch(e){ /* tyst */ }
+  render();
+}
+function currentMemberDisplayName(){
+  const me = householdMembers.find(m=>m.user_id===(session&&session.user.id));
+  if(!me) return 'Någon';
+  if(!me.user_id && me.display_name) return me.display_name;
+  if(me.email){ const n = me.email.split('@')[0]; return n.charAt(0).toUpperCase()+n.slice(1); }
+  return me.display_name || 'Någon';
+}
+function logHouseholdActivity(action, itemName){
+  if(!household) return;
+  supa.insert('household_activity', { household_id:household.id, member_name:currentMemberDisplayName(), action, item_name:itemName })
+    .then(()=>loadHouseholdActivity()).catch(()=>{});
+}
+
+let cumulativeSavings = null, cumulativeSavingsSince = null;
+async function loadCumulativeSavings(){
+  if(!household){ cumulativeSavings=null; cumulativeSavingsSince=null; return; }
+  try{
+    const rows = await supa.selectRaw(`household_savings_snapshots?select=potential_kr,week_start&household_id=eq.${household.id}&order=week_start.asc`);
+    if(Array.isArray(rows) && rows.length){
+      cumulativeSavings = rows.reduce((a,r)=>a+Number(r.potential_kr),0);
+      cumulativeSavingsSince = rows[0].week_start;
+    } else { cumulativeSavings = 0; cumulativeSavingsSince = null; }
+  }catch(e){ /* tyst */ }
+  render();
+}
+// Fired once per real render of "Veckans potential" (see viewOffers), not on
+// every render() call -- guarded by week so a household viewing the app
+// daily doesn't write 1 row per visit, just one upsert per ISO week
+// (Prefer: resolution=merge-duplicates on supa.insert already makes a
+// repeat write for the same week a no-op update instead of a duplicate).
+let savingsSnapshotSyncedWeek = null;
+function syncWeeklySavingsSnapshot(totalSave, dealCount){
+  if(!household) return;
+  const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
+  const weekStr = monday.toISOString().slice(0,10);
+  if(savingsSnapshotSyncedWeek === weekStr) return;
+  savingsSnapshotSyncedWeek = weekStr;
+  supa.insert('household_savings_snapshots', { household_id:household.id, week_start:weekStr, potential_kr:Math.round(totalSave*100)/100, deal_count:dealCount })
+    .then(()=>loadCumulativeSavings()).catch(()=>{ savingsSnapshotSyncedWeek = null; });
 }
 // ── Multi-store shopping lists ───────────────────────────────
 // A household can have several named lists (Veckohandling, Fredagsmiddag, ...),
@@ -1262,6 +1322,7 @@ async function addOffer(id){
   const discountPct = o.origPrice>0 ? Math.round((1-o.price/o.origPrice)*100) : null;
   track('offer_added_to_shopping_list', { deal_id:o.id, store_id:o.store, product_category:o.category, regular_price:o.origPrice, offer_price:o.price, discount_percent:discountPct }, {});
   track('shopping_list_item_added', { item_id:itemId, source:'offer', category:o.category }, {});
+  logHouseholdActivity('added', item.product);
 }
 async function toggleItem(id){
   const it = listItems.find(i=>i.id===id); if(!it) return;
@@ -1273,6 +1334,7 @@ async function removeItem(id){
   listItems = listItems.filter(i=>i.id!==id); markWrite(); render();
   try{ await supa.delete('shopping_list_items', id); }catch(e){ /* tyst */ }
   track('shopping_list_item_removed', { item_id:id, source: it?it.source:null }, {});
+  if(it) logHouseholdActivity('removed', it.product);
 }
 async function setManualStoreOverride(itemId, storeId){
   const it = listItems.find(i=>i.id===itemId); if(!it) return;
@@ -1295,6 +1357,7 @@ async function submitCustom(){
   listItems.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:'', category:c, emoji:item.emoji,
     quantity:qty, unit:'', preferred_store_id:preferredStoreId, is_checked:false, source:'manual', added_by:session.user.id }); }catch(e){ /* tyst */ }
+  logHouseholdActivity('added', item.product);
 }
 async function submitOffer(){
   const name=(document.getElementById('f_name')||{}).value||'';
@@ -1541,6 +1604,7 @@ function viewOffers(){
     return clearBtn + productSearchResultsView();
   }
   const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
+  syncWeeklySavingsSnapshot(totalSave, deals.length);
   const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
   const chipDefs = ['Alla'].concat(present);
   const chips = chipDefs.map(c=>{ const a=cat===c;
@@ -1954,6 +2018,16 @@ function loginGate(title, subtitle){
     </div>`}
   </div>`;
 }
+function timeAgo(iso){
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diffMs/60000);
+  if(min<1) return 'nyss';
+  if(min<60) return `${min} min sedan`;
+  const h = Math.round(min/60);
+  if(h<24) return `${h} tim sedan`;
+  const d = Math.round(h/24);
+  return d===1 ? 'igår' : `${d} dagar sedan`;
+}
 function householdPanel(){
   if(!session) return '';
   const myId = session.user.id;
@@ -1971,7 +2045,28 @@ function householdPanel(){
       <span style="font-size:13.5px;color:#8A7E6E;">${esc(i.email)} · väntar</span>
       ${isOwner ? `<button onclick="cancelInvite('${i.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Avbryt</button>` : ''}
     </div>`).join('');
-  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:16px;">
+  // Ackumulerad sparräknare -- review 2026-08-24 P2: "Veckans potential"
+  // used to be thrown away every week; household_savings_snapshots keeps
+  // one row per ISO week (see syncWeeklySavingsSnapshot in viewOffers), so
+  // this is just the running sum, shown once real history exists.
+  const savingsCard = (cumulativeSavings!=null && cumulativeSavings>0) ? `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:16px;padding:14px 16px;margin-bottom:12px;color:#fff;display:flex;align-items:center;gap:12px;box-shadow:0 8px 20px rgba(79,122,63,.22);">
+      ${icon('piggybank',30,{strokeWidth:1.6,style:'opacity:.9;'})}
+      <div style="flex:1;">
+        <div style="font-family:${DISP};font-weight:800;font-size:19px;line-height:1;">${kr(cumulativeSavings)}</div>
+        <div style="font-size:11.5px;opacity:.85;margin-top:3px;">sparat${cumulativeSavingsSince?' sedan '+new Date(cumulativeSavingsSince+'T00:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'long'}):''}</div>
+      </div>
+      <button onclick="shareApp()" style="flex:none;padding:8px 12px;border:none;border-radius:10px;background:rgba(255,255,255,.18);color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">Dela</button>
+    </div>` : '';
+  // Lätt hushålls-aktivitet -- review 2026-08-24 P3: "ren visningsfråga, inte
+  // ny arkitektur" -- logHouseholdActivity() is called from the exact same
+  // spots that already write shopping_list_items (addOffer/submitCustom/
+  // removeItem/addMenuToShoppingList).
+  const activityRows = householdActivity.map(a=>{
+    const verb = a.action==='removed' ? 'tog bort' : 'la till';
+    return `<div style="font-size:12px;color:#8A7E6E;padding:4px 0;">${esc(a.member_name)} ${verb} <span style="color:#2A211A;font-weight:600;">${esc(a.item_name)}</span> · ${timeAgo(a.created_at)}</div>`;
+  }).join('');
+  const activitySection = householdActivity.length ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #F5EFE2;">${activityRows}</div>` : '';
+  return savingsCard + `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:18px;padding:16px 18px;margin-bottom:16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
       <span style="font-weight:800;font-family:${DISP};font-size:15px;">👨‍👩‍👧‍👦 Ditt hushåll (${total}/5)</span>
       <button onclick="signOut()" style="border:none;background:none;color:#8A7E6E;font-size:12px;cursor:pointer;text-decoration:underline;">Logga ut</button>
@@ -1985,7 +2080,24 @@ function householdPanel(){
       <input id="invite_email" type="email" placeholder="familjemedlems mail (eget konto)" style="flex:1;padding:10px;border-radius:10px;border:1px solid #E3D8C6;font-size:13.5px;font-family:${FAM};outline:none;">
       <button onclick="inviteFamilyMember()" style="padding:10px 14px;border:none;border-radius:10px;background:#E0552E;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Bjud in</button>
     </div>` : (total>=5 ? `<div style="margin-top:8px;font-size:12px;color:#8A7E6E;">Hushållet är fullt (max 5).</div>` : '')}
+    ${activitySection}
   </div>`;
+}
+// Dela sparlista/hushåll utåt -- review 2026-08-24 P3: a free growth channel
+// on top of what the app already computes. navigator.share on mobile/
+// supported browsers, clipboard copy as the universal fallback.
+async function shareApp(){
+  const text = (cumulativeSavings!=null && cumulativeSavings>0)
+    ? `Vi har sparat ${kr(cumulativeSavings)} med VeckoFynd hittills — testa själv:`
+    : 'Kolla in VeckoFynd — jämför priser och spara pengar varje vecka:';
+  const url = location.origin + location.pathname;
+  if(navigator.share){
+    try{ await navigator.share({ title:'VeckoFynd', text, url }); track('app_shared', { method:'web_share' }, {}); }
+    catch(e){ /* användaren avbröt delningen -- inget fel */ }
+  } else {
+    try{ await navigator.clipboard.writeText(`${text} ${url}`); showToast('✓ Länk kopierad'); track('app_shared', { method:'clipboard' }, {}); }
+    catch(e){ showToast('Kunde inte kopiera länken'); }
+  }
 }
 function viewList(){
   if(!session) return loginGate();
@@ -2345,6 +2457,7 @@ async function addMenuToShoppingList(){
       quantity:1, unit:'st', deal_id:m.dealId, preferred_store_id:m.store, recommended_store_id:m.store, estimated_price:m.price, is_checked:false, source:'recipe', added_by:session.user.id }); }catch(e){}
   }
   markWrite(); tab='lista'; showToast(`✓ ${addedCount} varor tillagda från veckomenyn`); render();
+  if(addedCount>0) logHouseholdActivity('added', `${addedCount} varor från veckomenyn`);
 }
 function viewWeeklyMenu(){
   if(!weeklyMenu) buildWeeklyMenu();
