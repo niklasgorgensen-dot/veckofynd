@@ -1313,7 +1313,7 @@ function header(){
     </div>
     ${headerSearchBar()}
     <nav class="vf-sc" style="max-width:1080px;margin:0 auto;padding:11px clamp(16px,4vw,28px);display:flex;gap:8px;overflow-x:auto;">
-      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}${navBtn('halsa','💪 Hälsa')}
+      ${navBtn('erbjudanden','🏷️ Erbjudanden')}${navBtn('butiker','🏪 Butiker')}${navBtn('bevaka','👁️ Bevaka')}${navBtn('lista','📋 Lista')}${navBtn('recept','🍳 Recept')}${navBtn('halsa','💪 Hälsa')}${navBtn('priser','📈 Priser')}
     </nav>
   </header>`;
 }
@@ -2465,6 +2465,273 @@ function viewRecipes(){
   return intro + householdRow + budgetRow + tabRow + body;
 }
 
+// ── Prisutveckling ────────────────────────────────────────
+// Data source is price_observations (append-only, product_id-linked -- see
+// sync_price_observations_product_ids()), NOT deals (which is a current-week
+// snapshot, rows replaced every scrape). Two distinct questions the user asked
+// for: "this exact brand+package over time" (mode='one', one product_id) and
+// "this item in general across brands" (mode='all', every product_id that
+// matched the search term) -- comparison_group_id exists on products but is
+// unpopulated, so "all brands" is built directly from the search match set
+// rather than a formal product family, which is exactly what "sök på en vara"
+// means to the user anyway.
+let priceTrendTerm = '', priceTrendSearching = false, priceTrendError = null;
+let priceTrendMatches = null;      // rows from `products` matching the search
+let priceTrendMode = 'all';        // 'all' | 'one'
+let priceTrendSelectedId = null;
+let priceTrendRangeMonths = 3;
+let priceTrendSeriesLoading = false;
+let priceTrendRawRows = null;      // raw price_observations rows for the current search+range
+let priceTrendResult = null;       // computed {daily, stats, brandRows, ...}
+const PRICE_TREND_RANGES = [1,3,6,12,24,36];
+function priceTrendRangeLabel(m){ return m<12 ? `${m} mån` : `${m/12} år`; }
+
+async function searchPriceTrend(){
+  const el = document.getElementById('pt_search');
+  const term = el ? el.value.trim() : priceTrendTerm;
+  priceTrendTerm = term;
+  if(!term){ priceTrendMatches=null; priceTrendResult=null; priceTrendRawRows=null; render(); return; }
+  priceTrendSearching = true; priceTrendError = null; priceTrendMatches = null; priceTrendResult = null; render();
+  try{
+    const words = normalize(term).split(' ').filter(Boolean);
+    // The DB search itself must use the RAW word (å/ä/ö intact) since ilike
+    // does a literal substring match -- normalize()'s diacritic-stripping is
+    // only for the client-side refinement pass below, matching how the rest
+    // of the app's search already separates "find candidates" from "confirm
+    // real match" (see matchDealsForTerm).
+    const rawFirstWord = encodeURIComponent(term.trim().split(/\s+/)[0] || '');
+    const rows = await supa.selectRaw(`products?select=id,canonical_name,brand,category,normalized_unit&or=(canonical_name.ilike.*${rawFirstWord}*,brand.ilike.*${rawFirstWord}*)&limit=400`);
+    const matched = Array.isArray(rows) ? rows.filter(p=>{
+      const pn = normalize(p.canonical_name||''), pb = normalize(p.brand||'');
+      return words.every(w => stripFalseFriends(pn,w).includes(w) || stripFalseFriends(pb,w).includes(w));
+    }) : [];
+    priceTrendMatches = matched;
+    priceTrendMode = 'all'; priceTrendSelectedId = null;
+    if(matched.length) await loadPriceTrendSeries();
+  }catch(e){
+    priceTrendError = 'Kunde inte söka just nu, försök igen.';
+  }
+  priceTrendSearching = false; render();
+}
+function setPriceTrendRange(months){ priceTrendRangeMonths = months; loadPriceTrendSeries(); }
+function setPriceTrendMode(mode, id){ priceTrendMode = mode; priceTrendSelectedId = id || null; recomputePriceTrendResult(); }
+
+async function loadPriceTrendSeries(){
+  if(!priceTrendMatches || !priceTrendMatches.length) return;
+  priceTrendSeriesLoading = true; render();
+  try{
+    const ids = priceTrendMatches.map(p=>p.id);
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth()-priceTrendRangeMonths);
+    const cols = 'product_id,price,jamforpris,jamforenhet,unit,observed_at';
+    const rows = await supa.fetchAllPaginated(`price_observations?select=${cols}&product_id=in.(${ids.join(',')})&observed_at=gte.${cutoff.toISOString()}&order=observed_at.asc`);
+    priceTrendRawRows = Array.isArray(rows) ? rows : [];
+  }catch(e){
+    priceTrendRawRows = []; priceTrendError = 'Kunde inte hämta prishistorik just nu.';
+  }
+  priceTrendSeriesLoading = false;
+  recomputePriceTrendResult();
+}
+// jämförpris (kr/kg, kr/l, kr/st) is preferred over raw sticker price for the
+// exact same reason the recipe engine's estimateRoleCost() prefers it -- raw
+// price on a "st" deal is a whole-package price that isn't comparable across
+// different package sizes. Falls back to unit-derived price only when a row
+// has no jämförpris at all.
+function comparablePrice(row){
+  if(row.jamforpris!=null && row.jamforenhet) return { value:Number(row.jamforpris), unit: row.jamforenhet };
+  const u = row.unit==='kg'?'kr/kg':row.unit==='liter'?'kr/l':'kr/st';
+  return { value:Number(row.price), unit: u };
+}
+function recomputePriceTrendResult(){
+  if(!priceTrendRawRows){ priceTrendResult = null; render(); return; }
+  let rows = priceTrendRawRows;
+  if(priceTrendMode==='one' && priceTrendSelectedId) rows = rows.filter(r=>r.product_id===priceTrendSelectedId);
+  if(!rows.length){ priceTrendResult = { empty:true }; render(); return; }
+
+  // Never blend incompatible units into one average (e.g. kr/kg meat with
+  // kr/st cans) -- only the dominant unit among the matches is used; the rest
+  // are reported as excluded rather than silently mixed in.
+  const withCmp = rows.map(r=>({ ...r, cmp: comparablePrice(r) })).filter(r=>Number.isFinite(r.cmp.value) && r.cmp.value>0);
+  const unitCounts = new Map();
+  for(const r of withCmp) unitCounts.set(r.cmp.unit, (unitCounts.get(r.cmp.unit)||0)+1);
+  let dominantUnit = null, dominantCount = 0;
+  for(const [u,c] of unitCounts) if(c>dominantCount){ dominantUnit=u; dominantCount=c; }
+  const used = withCmp.filter(r=>r.cmp.unit===dominantUnit);
+  const excluded = withCmp.length - used.length;
+  if(!used.length){ priceTrendResult = { empty:true }; render(); return; }
+
+  const byDay = new Map();
+  for(const r of used){
+    const day = r.observed_at.slice(0,10);
+    if(!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(r.cmp.value);
+  }
+  const daily = [...byDay.entries()].map(([date,vals])=>({
+    date, min:Math.min(...vals), max:Math.max(...vals), avg:vals.reduce((a,b)=>a+b,0)/vals.length, n:vals.length
+  })).sort((a,b)=>a.date<b.date?-1:1);
+
+  const win = Math.max(1, Math.min(7, Math.round(daily.length/4)));
+  const ma = daily.map((d,i)=>{
+    const slice = daily.slice(Math.max(0,i-win+1), i+1);
+    return slice.reduce((a,b)=>a+b.avg,0)/slice.length;
+  });
+
+  // Simple linear regression (calendar days since first observation vs daily
+  // avg) -- a robust trend figure a CFO would trust more than "first day vs
+  // last day", since that endpoint comparison is noisy with only a handful
+  // of scrapes per day. Must use actual elapsed calendar days, not the array
+  // index -- scrape gaps (missed days, weekends) mean consecutive daily[]
+  // entries are NOT always 1 day apart, and index-based slope*30 silently
+  // overstated the monthly trend whenever a gap existed.
+  const n = daily.length;
+  const dayOffsets = daily.map(d => Math.round((new Date(d.date+'T00:00:00') - new Date(daily[0].date+'T00:00:00')) / 86400000));
+  const xMean = dayOffsets.reduce((a,b)=>a+b,0)/n, yMean = daily.reduce((a,d)=>a+d.avg,0)/n;
+  let num=0, den=0;
+  daily.forEach((d,i)=>{ num += (dayOffsets[i]-xMean)*(d.avg-yMean); den += (dayOffsets[i]-xMean)**2; });
+  const slopePerMonth = (den ? num/den : 0) * 30;
+  const variance = daily.reduce((a,d)=>a+(d.avg-yMean)**2,0)/n;
+  const cv = yMean ? Math.sqrt(variance)/yMean : 0;
+
+  const first = daily[0], last = daily[n-1];
+  const periodMinRow = daily.reduce((a,b)=>b.min<a.min?b:a, daily[0]);
+  const periodMaxRow = daily.reduce((a,b)=>b.max>a.max?b:a, daily[0]);
+  const changeAbs = last.avg - first.avg;
+  const changePct = first.avg ? (changeAbs/first.avg*100) : 0;
+
+  const byProduct = new Map();
+  for(const r of used){
+    const cur = byProduct.get(r.product_id);
+    if(!cur || r.observed_at > cur.observed_at) byProduct.set(r.product_id, r);
+  }
+  const productMeta = new Map((priceTrendMatches||[]).map(p=>[p.id,p]));
+  const brandRows = [...byProduct.entries()].map(([pid,r])=>{
+    const meta = productMeta.get(pid) || {};
+    return { id:pid, name:meta.canonical_name||'Okänd produkt', brand:meta.brand||null, price:r.cmp.value, unit:r.cmp.unit };
+  }).sort((a,b)=>a.price-b.price);
+
+  const earliestDataDate = priceTrendRawRows.reduce((min,r)=> r.observed_at<min?r.observed_at:min, priceTrendRawRows[0].observed_at).slice(0,10);
+
+  priceTrendResult = { empty:false, daily, ma, dominantUnit, excluded, first, last, periodMinRow, periodMaxRow, periodAvg:yMean, changeAbs, changePct, slopePerMonth, cv, brandRows, earliestDataDate };
+  render();
+}
+function priceTrendChartSvg(result){
+  const { daily, ma } = result;
+  const W=680, H=260, padL=44, padR=14, padT=16, padB=30;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const n = daily.length;
+  const allVals = daily.flatMap(d=>[d.min,d.max]);
+  let yMin = Math.min(...allVals), yMax = Math.max(...allVals);
+  if(yMin===yMax){ const slack=Math.max(1,yMin*0.1); yMin-=slack; yMax+=slack; }
+  const pad = (yMax-yMin)*0.12; yMin = Math.max(0,yMin-pad); yMax += pad;
+
+  const dates = daily.map(d=>new Date(d.date+'T00:00:00').getTime());
+  const t0=dates[0], t1=dates[n-1];
+  const xOf = i => n===1 ? padL+plotW/2 : padL + (dates[i]-t0)/((t1-t0)||1)*plotW;
+  const yOf = v => padT + plotH - (v-yMin)/((yMax-yMin)||1)*plotH;
+
+  const avgPts = daily.map((d,i)=>[xOf(i),yOf(d.avg)]);
+  const minPts = daily.map((d,i)=>[xOf(i),yOf(d.min)]);
+  const maxPts = daily.map((d,i)=>[xOf(i),yOf(d.max)]);
+  const maPts = ma.map((v,i)=>[xOf(i),yOf(v)]);
+  const lineOf = pts => pts.length>1 ? `M${pts.map(p=>p.join(',')).join(' L')}` : '';
+  const bandPath = n>1 ? `M${maxPts.map(p=>p.join(',')).join(' L')} L${minPts.slice().reverse().map(p=>p.join(',')).join(' L')} Z` : '';
+
+  const gridLines = [0,0.5,1].map(f=>{
+    const y = padT + plotH*f, val = yMax - (yMax-yMin)*f;
+    return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#EFE6D8" stroke-width="1"/><text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10.5" fill="#8A7E6E" font-family="${FAM}">${Math.round(val)}</text>`;
+  }).join('');
+  const dateFmt = ts => new Date(ts).toLocaleDateString('sv-SE',{day:'numeric',month:'short'});
+  const xLabels = n>=2 ? [0,n-1].map(i=>`<text x="${xOf(i)}" y="${H-8}" text-anchor="${i===0?'start':'end'}" font-size="10.5" fill="#8A7E6E" font-family="${FAM}">${dateFmt(dates[i])}</text>`).join('') : '';
+  const minIdx = daily.reduce((bi,d,i,arr)=>d.min<arr[bi].min?i:bi, 0);
+  const minMarker = `<circle cx="${xOf(minIdx)}" cy="${yOf(daily[minIdx].min)}" r="4" fill="#3E6632" stroke="#fff" stroke-width="2"/>`;
+  const dots = n<=14 ? daily.map((d,i)=>`<circle cx="${xOf(i)}" cy="${yOf(d.avg)}" r="2.6" fill="#E0552E"/>`).join('') : '';
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" preserveAspectRatio="xMidYMid meet">
+    ${gridLines}
+    ${bandPath?`<path d="${bandPath}" fill="#E0552E" opacity="0.09"/>`:''}
+    ${maPts.length>1?`<path d="${lineOf(maPts)}" fill="none" stroke="#B6A893" stroke-width="1.6" stroke-dasharray="4,4"/>`:''}
+    <path d="${lineOf(avgPts)}" fill="none" stroke="#E0552E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}${minMarker}${xLabels}
+  </svg>`;
+}
+function priceTrendStatCard(label, value, sub, color){
+  return `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:16px;padding:14px 16px;flex:1;min-width:132px;">
+    <div style="font-size:11px;font-weight:700;color:#8A7E6E;text-transform:uppercase;letter-spacing:.04em;">${label}</div>
+    <div style="font-family:${DISP};font-weight:800;font-size:19px;margin-top:4px;${color?`color:${color};`:''}">${value}</div>
+    ${sub?`<div style="font-size:11.5px;color:#8A7E6E;margin-top:2px;">${sub}</div>`:''}
+  </div>`;
+}
+function priceTrendUnitSuffix(u){ return u==='kr/kg'?'/kg':u==='kr/l'?'/l':'/st'; }
+function viewPriceTrends(){
+  const searchBar = `<div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #EFE6D8;border-radius:14px;padding:5px 6px 5px 14px;margin-bottom:16px;">
+      <span style="font-size:15px;flex:none;color:#8A7E6E;">🔍</span>
+      <input id="pt_search" type="text" placeholder="Sök en vara, t.ex. nötfärs, mjölk, kaffe…" value="${esc(priceTrendTerm)}" onkeydown="if(event.key==='Enter')searchPriceTrend()" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:14px;font-family:${FAM};padding:9px 0;color:#2A211A;">
+      <button onclick="searchPriceTrend()" style="flex:none;padding:10px 16px;border-radius:11px;border:none;background:#2A211A;color:#fff;font-weight:700;font-size:13px;font-family:${FAM};cursor:pointer;">Sök</button>
+    </div>`;
+  const intro = `<div style="background:linear-gradient(135deg,#2A211A,#443627);border-radius:22px;padding:20px 22px;color:#fff;margin-bottom:16px;box-shadow:0 12px 28px rgba(42,33,26,.24);">
+      <div style="font-size:13px;opacity:.9;font-weight:600;">📈 Prisutveckling</div>
+      <div style="font-size:13.5px;opacity:.9;margin-top:6px;line-height:1.5;">Sök på en vara för att se hur priset förändrats över tid — jämför ett specifikt märke eller alla märken generellt.</div>
+    </div>`;
+
+  if(priceTrendSearching) return intro + searchBar + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Söker…</div>`;
+  if(!priceTrendMatches){
+    if(priceTrendError) return intro + searchBar + `<div style="text-align:center;padding:20px;color:#C2431F;">${esc(priceTrendError)}</div>`;
+    const examples = ['Nötfärs','Mjölk','Kaffe','Smör','Ost'].map(t=>`<button onclick="document.getElementById('pt_search').value='${t}';searchPriceTrend();" style="padding:9px 14px;border-radius:12px;border:1px solid #EFE6D8;background:#fff;color:#6A5E50;font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};">${t}</button>`).join('');
+    return intro + searchBar + `<div style="display:flex;gap:8px;flex-wrap:wrap;">${examples}</div>`;
+  }
+  if(!priceTrendMatches.length) return intro + searchBar + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Hittade inga varor som matchar "${esc(priceTrendTerm)}". Prova ett annat sökord.</div>`;
+
+  const rangeSel = `<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;" class="vf-sc">
+      ${PRICE_TREND_RANGES.map(m=>`<button onclick="setPriceTrendRange(${m})" style="flex:none;padding:9px 14px;border-radius:12px;border:${priceTrendRangeMonths===m?'none':'1px solid #EFE6D8'};background:${priceTrendRangeMonths===m?'#2A211A':'#fff'};color:${priceTrendRangeMonths===m?'#fff':'#6A5E50'};font-weight:700;font-size:13px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${priceTrendRangeLabel(m)}</button>`).join('')}
+    </div>`;
+  const modeToggle = priceTrendMatches.length>1 ? `<div style="display:flex;background:#F0E8DA;border-radius:14px;padding:4px;margin-bottom:14px;">
+      <button onclick="setPriceTrendMode('all')" style="${seg(priceTrendMode==='all')}">🌍 Alla märken (${priceTrendMatches.length})</button>
+      <button onclick="setPriceTrendMode('one','${priceTrendSelectedId||priceTrendMatches[0].id}')" style="${seg(priceTrendMode==='one')}">🏷️ Ett märke</button>
+    </div>` : '';
+  const onePicker = priceTrendMode==='one' && priceTrendMatches.length>1 ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;" class="vf-sc">
+      ${priceTrendMatches.map(p=>`<button onclick="setPriceTrendMode('one','${p.id}')" style="flex:none;padding:8px 12px;border-radius:11px;border:${priceTrendSelectedId===p.id?'none':'1px solid #EFE6D8'};background:${priceTrendSelectedId===p.id?'#2A211A':'#fff'};color:${priceTrendSelectedId===p.id?'#fff':'#6A5E50'};font-weight:700;font-size:12.5px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${p.brand?esc(p.brand)+' · ':''}${esc(p.canonical_name)}</button>`).join('')}
+    </div>` : '';
+
+  if(priceTrendSeriesLoading || !priceTrendResult) return intro + searchBar + rangeSel + modeToggle + onePicker + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Laddar prishistorik…</div>`;
+  const r = priceTrendResult;
+  if(r.empty) return intro + searchBar + rangeSel + modeToggle + onePicker + `<div style="text-align:center;padding:40px 20px;color:#8A7E6E;">Ingen prisdata i den valda perioden än.</div>`;
+
+  const earliestFmt = new Date(r.earliestDataDate+'T00:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'long',year:'numeric'});
+  const coverageNote = `<div style="font-size:12px;color:#8A7E6E;background:#F5EFE2;border-radius:11px;padding:9px 13px;margin-bottom:14px;">📊 Prisdata samlad sedan ${earliestFmt} (${r.daily.length} ${r.daily.length===1?'dag':'dagar med data'}). Historiken växer automatiskt allt eftersom fler veckor skrapas.</div>`;
+
+  const changeColor = r.changeAbs>0.001?'#C2431F':r.changeAbs<-0.001?'#3E6632':'#6A5E50';
+  const changeArrow = r.changeAbs>0.001?'↑':r.changeAbs<-0.001?'↓':'→';
+  const changeSub = `${r.first.date.slice(8,10)}/${r.first.date.slice(5,7)} → ${r.last.date.slice(8,10)}/${r.last.date.slice(5,7)}`;
+  const statCards = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+    ${priceTrendStatCard('Nuvarande pris', kr(Math.round(r.last.avg*100)/100)+priceTrendUnitSuffix(r.dominantUnit), null, '#E0552E')}
+    ${priceTrendStatCard('Förändring i perioden', `${changeArrow} ${r.changeAbs>=0?'+':''}${kr(Math.round(r.changeAbs*100)/100)} (${r.changePct>=0?'+':''}${r.changePct.toFixed(1)}%)`, changeSub, changeColor)}
+    ${priceTrendStatCard('Lägsta pris', kr(Math.round(r.periodMinRow.min*100)/100), new Date(r.periodMinRow.date+'T00:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'short'}), '#3E6632')}
+    ${priceTrendStatCard('Högsta pris', kr(Math.round(r.periodMaxRow.max*100)/100), new Date(r.periodMaxRow.date+'T00:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'short'}), '#C2431F')}
+    ${priceTrendStatCard('Snittpris', kr(Math.round(r.periodAvg*100)/100), null, null)}
+  </div>`;
+
+  const volLabel = r.cv<0.05?'Stabilt pris':r.cv<0.15?'Måttligt varierande pris':'Volatilt pris';
+  const trendLabel = Math.abs(r.slopePerMonth)<0.05 ? 'Ingen tydlig trend' : `${r.slopePerMonth>0?'📈':'📉'} Trend: ${r.slopePerMonth>=0?'+':''}${r.slopePerMonth.toFixed(2)} kr/månad`;
+  const trendRow = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="font-size:12.5px;font-weight:700;color:#6A5E50;background:#fff;border:1px solid #EFE6D8;border-radius:11px;padding:8px 13px;">${trendLabel}</div>
+      <div style="font-size:12.5px;font-weight:700;color:#6A5E50;background:#fff;border:1px solid #EFE6D8;border-radius:11px;padding:8px 13px;">${volLabel}</div>
+      ${r.excluded>0?`<div style="font-size:12.5px;font-weight:700;color:#A67C3D;background:#F8F1E3;border-radius:11px;padding:8px 13px;">${r.excluded} observationer uteslutna (annan prisenhet)</div>`:''}
+    </div>`;
+  const chart = `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:18px;margin-bottom:16px;">${priceTrendChartSvg(r)}</div>`;
+  const brandTable = priceTrendMode==='all' && r.brandRows.length>1 ? `<div style="background:#fff;border:1px solid #EFE6D8;border-radius:20px;padding:6px;margin-bottom:16px;">
+      <div style="font-size:12.5px;font-weight:800;color:#6A5E50;padding:12px 14px 6px;">Jämför märken — billigast just nu</div>
+      ${r.brandRows.map((b,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;${i<r.brandRows.length-1?'border-bottom:1px solid #F5EFE2;':''}">
+          <span style="flex:none;width:22px;height:22px;border-radius:7px;background:${i===0?'#EAF1E3':'#F5EFE2'};color:${i===0?'#3E6632':'#8A7E6E'};font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">${i+1}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.name)}</div>
+            ${b.brand?`<div style="font-size:11px;color:#A67C3D;font-weight:700;">${esc(b.brand)}</div>`:''}
+          </div>
+          <div style="flex:none;font-family:${DISP};font-weight:800;font-size:15px;color:${i===0?'#3E6632':'#2A211A'};">${kr(b.price)}${priceTrendUnitSuffix(b.unit)}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  return intro + searchBar + rangeSel + modeToggle + onePicker + coverageNote + statCards + trendRow + chart + brandTable;
+}
+
 function inputStyle(){ return `width:100%;padding:12px;border-radius:12px;border:1px solid #E3D8C6;background:#fff;font-size:15px;font-family:${FAM};color:#2A211A;outline:none;`; }
 function storeOptions(){ return STORES.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join(''); }
 function catOptions(){ return CAT_ORDER.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join(''); }
@@ -2510,7 +2777,7 @@ function sheetView(){
 function fab(){ return `<button onclick="openSheet('erbjudande')" style="position:fixed;right:clamp(16px,4vw,28px);bottom:calc(24px + env(safe-area-inset-bottom));z-index:30;height:54px;padding:0 22px;border:none;border-radius:17px;background:#E0552E;color:#fff;font-family:${DISP};font-weight:700;font-size:16px;box-shadow:0 10px 26px rgba(224,85,46,.42);cursor:pointer;display:flex;align-items:center;gap:8px;">✏️ Erbjudande</button>`; }
 
 function render(){
-  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():tab==='bevaka'?viewWatchlist():tab==='halsa'?viewHealth():viewList();
+  const main = tab==='erbjudanden'?viewOffers():tab==='butiker'?viewStores():tab==='recept'?viewRecipes():tab==='bevaka'?viewWatchlist():tab==='halsa'?viewHealth():tab==='priser'?viewPriceTrends():viewList();
   document.getElementById('app').innerHTML =
     header() +
     `<main style="${PAGE}padding-bottom:96px;animation:vfFade .3s ease;">${main}</main>` +
