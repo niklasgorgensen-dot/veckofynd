@@ -141,7 +141,7 @@ let household = null, householdMembers = [], householdInvites = [];
 async function loadAuthAndHousehold(isRetry){
   const { data } = await sbAuth.auth.getSession();
   session = data.session || null;
-  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; currentMemberId=null; memberGoals=[]; todayActivity=null; todayFoodLogs=[]; householdActivity=[]; cumulativeSavings=null; cumulativeSavingsSince=null; render(); return; }
+  if(!session){ household=null; householdMembers=[]; householdInvites=[]; householdLoadError=false; currentMemberId=null; memberGoals=[]; todayActivity=null; todayFoodLogs=[]; householdActivity=[]; householdSpendStats=null; render(); return; }
   householdLoadError = false;
   try{
     const mems = await supa.selectRaw('household_members?select=*');
@@ -177,7 +177,6 @@ async function loadAuthAndHousehold(isRetry){
   loadTodayActivity();
   loadTodayFoodLogs();
   loadHouseholdActivity();
-  loadCumulativeSavings();
 }
 // ── Hushålls-aktivitet & ackumulerad sparräknare ─────────────
 // Review 2026-08-24 P2/P3: both are pure display on top of data the app
@@ -210,33 +209,50 @@ function logHouseholdActivity(action, itemName){
     .then(()=>loadHouseholdActivity()).catch(()=>{});
 }
 
-let cumulativeSavings = null, cumulativeSavingsSince = null;
-async function loadCumulativeSavings(){
-  if(!household){ cumulativeSavings=null; cumulativeSavingsSince=null; return; }
+// Verified spend/savings -- replaces the old household_savings_snapshots
+// mechanism, which summed "Veckans potential" (every discount in the whole
+// catalog, whether anyone bought anything or not) into a fake "sparat"
+// figure. Real numbers only come from items the household actually checked
+// off as bought: estimated_orig_price (the deal's ordinarie pris, captured
+// at add-time since the `deals` row it came from gets replaced every scrape
+// and won't exist to look up later) minus actual_price (what was paid,
+// defaulting to the deal price but editable -- see toggleItem/editActualPrice)
+// is a real saving; actual_price alone, summed, is real matkostnad.
+let householdSpendPeriod = 'week'; // 'week' | 'month' | 'year' | 'all'
+let householdSpendStats = null;    // {spent, saved, itemCount, since} | null
+function periodCutoffDate(period){
+  const d = new Date();
+  if(period==='week'){ d.setDate(d.getDate() - ((d.getDay()+6)%7)); d.setHours(0,0,0,0); }
+  else if(period==='month'){ d.setDate(1); d.setHours(0,0,0,0); }
+  else if(period==='year'){ d.setMonth(0,1); d.setHours(0,0,0,0); }
+  else return null;
+  return d;
+}
+async function loadHouseholdSpendStats(){
+  if(!household || !shoppingLists.length){ householdSpendStats=null; render(); return; }
   try{
-    const rows = await supa.selectRaw(`household_savings_snapshots?select=potential_kr,week_start&household_id=eq.${household.id}&order=week_start.asc`);
-    if(Array.isArray(rows) && rows.length){
-      cumulativeSavings = rows.reduce((a,r)=>a+Number(r.potential_kr),0);
-      cumulativeSavingsSince = rows[0].week_start;
-    } else { cumulativeSavings = 0; cumulativeSavingsSince = null; }
-  }catch(e){ /* tyst */ }
+    const listIds = shoppingLists.map(l=>l.id);
+    const cutoff = periodCutoffDate(householdSpendPeriod);
+    let url = `shopping_list_items?select=estimated_price,estimated_orig_price,actual_price,checked_at&list_id=in.(${listIds.join(',')})&is_checked=eq.true`;
+    if(cutoff) url += `&checked_at=gte.${cutoff.toISOString()}`;
+    const rows = await supa.selectRaw(url);
+    if(!Array.isArray(rows)){ householdSpendStats=null; render(); return; }
+    let spent=0, saved=0, n=0, earliest=null;
+    for(const r of rows){
+      const paid = r.actual_price!=null ? Number(r.actual_price) : (r.estimated_price!=null ? Number(r.estimated_price) : null);
+      if(paid==null) continue;
+      spent += paid; n++;
+      if(r.estimated_orig_price!=null){
+        const s = Number(r.estimated_orig_price) - paid;
+        if(s>0) saved += s;
+      }
+      if(r.checked_at && (!earliest || r.checked_at<earliest)) earliest = r.checked_at;
+    }
+    householdSpendStats = { spent:Math.round(spent*100)/100, saved:Math.round(saved*100)/100, itemCount:n, since:earliest };
+  }catch(e){ householdSpendStats = null; }
   render();
 }
-// Fired once per real render of "Veckans potential" (see viewOffers), not on
-// every render() call -- guarded by week so a household viewing the app
-// daily doesn't write 1 row per visit, just one upsert per ISO week
-// (Prefer: resolution=merge-duplicates on supa.insert already makes a
-// repeat write for the same week a no-op update instead of a duplicate).
-let savingsSnapshotSyncedWeek = null;
-function syncWeeklySavingsSnapshot(totalSave, dealCount){
-  if(!household) return;
-  const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
-  const weekStr = monday.toISOString().slice(0,10);
-  if(savingsSnapshotSyncedWeek === weekStr) return;
-  savingsSnapshotSyncedWeek = weekStr;
-  supa.insert('household_savings_snapshots', { household_id:household.id, week_start:weekStr, potential_kr:Math.round(totalSave*100)/100, deal_count:dealCount })
-    .then(()=>loadCumulativeSavings()).catch(()=>{ savingsSnapshotSyncedWeek = null; });
-}
+function setHouseholdSpendPeriod(p){ householdSpendPeriod = p; loadHouseholdSpendStats(); }
 // ── Multi-store shopping lists ───────────────────────────────
 // A household can have several named lists (Veckohandling, Fredagsmiddag, ...),
 // each spanning multiple active stores at once -- the user always works from
@@ -262,6 +278,7 @@ async function loadShoppingList(){
       if(currentListId) localStorage.setItem('vf_current_list_id', currentListId);
     }
     await loadCurrentListDetail();
+    loadHouseholdSpendStats();
   }catch(e){ /* tyst */ }
 }
 async function createShoppingList(name, seedFollowedStores){
@@ -289,7 +306,9 @@ async function loadCurrentListDetail(){
     const nextItems = Array.isArray(itemRows) ? itemRows.map(r=>({ id:r.id, product:r.product, detail:r.detail||'', category:r.category||'Skafferivaror',
       emoji:r.emoji||'🛒', quantity:r.quantity||1, unit:r.unit||'', dealId:r.deal_id!=null?Number(r.deal_id):null,
       preferredStoreId:r.preferred_store_id, recommendedStoreId:r.recommended_store_id, manualStoreOverride:r.manual_store_override,
-      estimatedPrice:r.estimated_price!=null?Number(r.estimated_price):null, checked:!!r.is_checked, source:r.source||'manual' })) : [];
+      estimatedPrice:r.estimated_price!=null?Number(r.estimated_price):null, estimatedOrigPrice:r.estimated_orig_price!=null?Number(r.estimated_orig_price):null,
+      actualPrice:r.actual_price!=null?Number(r.actual_price):null, checkedAt:r.checked_at||null,
+      checked:!!r.is_checked, source:r.source||'manual' })) : [];
     const changed = JSON.stringify(nextItems) !== JSON.stringify(listItems);
     listItems = nextItems;
     if(changed) render();
@@ -1325,19 +1344,54 @@ async function addOffer(id){
   if(!listStores.some(s=>s.storeId===o.store)) await addListStore(o.store);
   const itemId = crypto.randomUUID();
   const item = { id:itemId, product:o.product, detail:o.detail, category:o.category, emoji:o.emoji, quantity:1, unit:o.unit,
-    dealId:o.id, preferredStoreId:o.store, recommendedStoreId:o.store, manualStoreOverride:null, estimatedPrice:o.price, checked:false, source:'offer' };
+    dealId:o.id, preferredStoreId:o.store, recommendedStoreId:o.store, manualStoreOverride:null, estimatedPrice:o.price,
+    estimatedOrigPrice:o.origPrice??null, actualPrice:null, checkedAt:null, checked:false, source:'offer' };
   listItems.push(item); markWrite(); showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:item.detail, category:item.category, emoji:item.emoji,
-    quantity:1, unit:item.unit, deal_id:o.id, preferred_store_id:o.store, recommended_store_id:o.store, estimated_price:o.price, is_checked:false, source:'offer', added_by:session.user.id }); }catch(e){ /* tyst */ }
+    quantity:1, unit:item.unit, deal_id:o.id, preferred_store_id:o.store, recommended_store_id:o.store, estimated_price:o.price,
+    estimated_orig_price:o.origPrice??null, is_checked:false, source:'offer', added_by:session.user.id }); }catch(e){ /* tyst */ }
   const discountPct = o.origPrice>0 ? Math.round((1-o.price/o.origPrice)*100) : null;
   track('offer_added_to_shopping_list', { deal_id:o.id, store_id:o.store, product_category:o.category, regular_price:o.origPrice, offer_price:o.price, discount_percent:discountPct }, {});
   track('shopping_list_item_added', { item_id:itemId, source:'offer', category:o.category }, {});
   logHouseholdActivity('added', item.product);
 }
+// Checking an item off is the "jag köpte det här" signal that drives real
+// (not catalog-wide potential) savings/matkostnad -- see loadHouseholdSpendStats.
+// Default to the deal/estimated price with zero friction (the common case:
+// price didn't change); only ask when there's nothing to default to (manual
+// items have no estimatedPrice). editActualPrice() lets you correct it after
+// the fact if what you paid differed.
 async function toggleItem(id){
   const it = listItems.find(i=>i.id===id); if(!it) return;
-  it.checked = !it.checked; markWrite(); render();
-  try{ await supa.update('shopping_list_items', id, { is_checked: it.checked }); }catch(e){ /* tyst */ }
+  const turningOn = !it.checked;
+  if(turningOn){
+    if(it.actualPrice==null){
+      if(it.estimatedPrice!=null){ it.actualPrice = it.estimatedPrice; }
+      else {
+        const entered = prompt(`Vad kostade ${it.product}? (kr, kan lämnas tomt)`, '');
+        if(entered!=null && entered.trim()!==''){
+          const v = parseFloat(entered.replace(',','.'));
+          if(!isNaN(v) && v>=0) it.actualPrice = v;
+        }
+      }
+    }
+    it.checkedAt = new Date().toISOString();
+  } else {
+    it.checkedAt = null;
+  }
+  it.checked = turningOn; markWrite(); render();
+  try{ await supa.update('shopping_list_items', id, { is_checked: it.checked, checked_at: it.checkedAt, actual_price: it.actualPrice }); }catch(e){ /* tyst */ }
+  loadHouseholdSpendStats();
+}
+async function editActualPrice(id){
+  const it = listItems.find(i=>i.id===id); if(!it || !it.checked) return;
+  const entered = prompt(`Ändra pris för ${it.product} (kr):`, it.actualPrice!=null?String(it.actualPrice):'');
+  if(entered==null) return;
+  const v = parseFloat(entered.replace(',','.'));
+  if(isNaN(v) || v<0) return;
+  it.actualPrice = v; render();
+  try{ await supa.update('shopping_list_items', id, { actual_price:v }); }catch(e){ /* tyst */ }
+  loadHouseholdSpendStats();
 }
 async function removeItem(id){
   const it = listItems.find(i=>i.id===id);
@@ -1363,7 +1417,8 @@ async function submitCustom(){
   const qty=Math.max(1, parseInt((document.getElementById('f_qty')||{}).value||'1')||1);
   const itemId = crypto.randomUUID();
   const item = { id:itemId, product:name.trim(), detail:'', category:c, emoji:CAT_EMOJI[c]||'🛒', quantity:qty, unit:'',
-    dealId:null, preferredStoreId, recommendedStoreId:preferredStoreId, manualStoreOverride:null, estimatedPrice:null, checked:false, source:'manual' };
+    dealId:null, preferredStoreId, recommendedStoreId:preferredStoreId, manualStoreOverride:null, estimatedPrice:null,
+    estimatedOrigPrice:null, actualPrice:null, checkedAt:null, checked:false, source:'manual' };
   listItems.push(item); markWrite(); sheet=null; tab='lista'; showToast(`✓ ${item.product} tillagd på listan`); render();
   try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail:'', category:c, emoji:item.emoji,
     quantity:qty, unit:'', preferred_store_id:preferredStoreId, is_checked:false, source:'manual', added_by:session.user.id }); }catch(e){ /* tyst */ }
@@ -1614,7 +1669,6 @@ function viewOffers(){
     return clearBtn + productSearchResultsView();
   }
   const totalSave = deals.reduce((a,o)=>a+(isPerUnitDiscount(o.unit)?Math.max(0,(o.origPrice||0)-o.price):0),0);
-  syncWeeklySavingsSnapshot(totalSave, deals.length);
   const present = CAT_ORDER.filter(c=>deals.some(o=>o.category===c));
   const chipDefs = ['Alla'].concat(present);
   const chips = chipDefs.map(c=>{ const a=cat===c;
@@ -2055,18 +2109,33 @@ function householdPanel(){
       <span style="font-size:13.5px;color:#8A7E6E;">${esc(i.email)} · väntar</span>
       ${isOwner ? `<button onclick="cancelInvite('${i.id}')" style="border:none;background:none;color:#B6A893;cursor:pointer;font-size:12.5px;">Avbryt</button>` : ''}
     </div>`).join('');
-  // Ackumulerad sparräknare -- review 2026-08-24 P2: "Veckans potential"
-  // used to be thrown away every week; household_savings_snapshots keeps
-  // one row per ISO week (see syncWeeklySavingsSnapshot in viewOffers), so
-  // this is just the running sum, shown once real history exists.
-  const savingsCard = (cumulativeSavings!=null && cumulativeSavings>0) ? `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:16px;padding:14px 16px;margin-bottom:12px;color:#fff;display:flex;align-items:center;gap:12px;box-shadow:0 8px 20px rgba(79,122,63,.22);">
-      ${icon('piggybank',30,{strokeWidth:1.6,style:'opacity:.9;'})}
-      <div style="flex:1;">
-        <div style="font-family:${DISP};font-weight:800;font-size:19px;line-height:1;">${kr(cumulativeSavings)}</div>
-        <div style="font-size:11.5px;opacity:.85;margin-top:3px;">sparat${cumulativeSavingsSince?' sedan '+new Date(cumulativeSavingsSince+'T00:00:00').toLocaleDateString('sv-SE',{day:'numeric',month:'long'}):''}</div>
+  // Verified spend/savings -- built from items the household actually checked
+  // off as bought (see loadHouseholdSpendStats), not catalog-wide "potential".
+  // Period pills mirror the Prisutveckling range-selector pattern for a
+  // consistent app-wide language. Stays hidden (not a zeroed card) until
+  // there's at least one checked-off item, matching how Prisutveckling only
+  // shows once there's real history rather than displaying an empty 0 kr.
+  const periodLabels = { week:'Denna vecka', month:'Denna månad', year:'I år', all:'Totalt' };
+  const spendPeriodPills = Object.keys(periodLabels).map(p=>`<button onclick="setHouseholdSpendPeriod('${p}')" style="flex:none;padding:6px 11px;border-radius:10px;border:${householdSpendPeriod===p?'none':'1px solid rgba(255,255,255,.35)'};background:${householdSpendPeriod===p?'rgba(255,255,255,.22)':'transparent'};color:#fff;font-weight:700;font-size:11.5px;cursor:pointer;font-family:${FAM};white-space:nowrap;">${periodLabels[p]}</button>`).join('');
+  const st = householdSpendStats;
+  const savingsCard = (st && st.itemCount>0) ? `<div style="background:linear-gradient(135deg,#4F7A3F,#3E6632);border-radius:16px;padding:14px 16px;margin-bottom:12px;color:#fff;box-shadow:0 8px 20px rgba(79,122,63,.22);">
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${icon('piggybank',30,{strokeWidth:1.6,style:'opacity:.9;flex:none;'})}
+        <div style="flex:1;display:flex;gap:18px;">
+          <div>
+            <div style="font-family:${DISP};font-weight:800;font-size:19px;line-height:1;">${kr(st.saved)}</div>
+            <div style="font-size:11px;opacity:.85;margin-top:3px;">sparat (verifierat)</div>
+          </div>
+          <div>
+            <div style="font-family:${DISP};font-weight:800;font-size:19px;line-height:1;">${kr(st.spent)}</div>
+            <div style="font-size:11px;opacity:.85;margin-top:3px;">matkostnad</div>
+          </div>
+        </div>
+        <button onclick="shareApp()" style="flex:none;padding:8px 12px;border:none;border-radius:10px;background:rgba(255,255,255,.18);color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">Dela</button>
       </div>
-      <button onclick="shareApp()" style="flex:none;padding:8px 12px;border:none;border-radius:10px;background:rgba(255,255,255,.18);color:#fff;font-weight:700;font-size:12px;font-family:${FAM};cursor:pointer;">Dela</button>
-    </div>` : '';
+      <div style="display:flex;gap:6px;overflow-x:auto;margin-top:10px;" class="vf-sc">${spendPeriodPills}</div>
+      <div style="font-size:11px;opacity:.8;margin-top:8px;">Baserat på ${st.itemCount} avbockade varor${st.since?' sedan '+new Date(st.since).toLocaleDateString('sv-SE',{day:'numeric',month:'long'}):''}. Bocka av på listan när du handlat för att räkna med det här.</div>
+    </div>` : (household ? `<div style="background:#F5EFE2;border-radius:16px;padding:14px 16px;margin-bottom:12px;color:#6A5E50;font-size:12.5px;line-height:1.5;">📋 Bocka av varor på listan när du handlat dem, så räknar vi ut din riktiga besparing och matkostnad här — inte bara vad som teoretiskt gick att spara.</div>` : '');
   // Lätt hushålls-aktivitet -- review 2026-08-24 P3: "ren visningsfråga, inte
   // ny arkitektur" -- logHouseholdActivity() is called from the exact same
   // spots that already write shopping_list_items (addOffer/submitCustom/
@@ -2097,8 +2166,8 @@ function householdPanel(){
 // on top of what the app already computes. navigator.share on mobile/
 // supported browsers, clipboard copy as the universal fallback.
 async function shareApp(){
-  const text = (cumulativeSavings!=null && cumulativeSavings>0)
-    ? `Vi har sparat ${kr(cumulativeSavings)} med VeckoFynd hittills — testa själv:`
+  const text = (householdSpendStats && householdSpendStats.saved>0)
+    ? `Vi har sparat ${kr(householdSpendStats.saved)} med VeckoFynd hittills — testa själv:`
     : 'Kolla in VeckoFynd — jämför priser och spara pengar varje vecka:';
   const url = location.origin + location.pathname;
   if(navigator.share){
@@ -2201,7 +2270,9 @@ function viewList(){
     const checkStyle=`width:25px;height:25px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:13px;font-weight:800;color:#fff;background:${item.checked?'#4F7A3F':'#fff'};border:${item.checked?'1px solid #4F7A3F':'2px solid #E0D5C2'};`;
     const nameStyle=`font-weight:700;font-size:14.5px;color:${item.checked?'#B6A893':'#2A211A'};text-decoration:${item.checked?'line-through':'none'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
     const storeName = assignment.storeId ? esc(storeById(assignment.storeId).name) : (assignment.available===false ? 'inget pris hittat' : '');
-    const priceStr = assignment.price!=null ? kr(assignment.price*item.quantity) : '—';
+    const priceStr = item.checked
+      ? (item.actualPrice!=null ? kr(item.actualPrice*item.quantity) : '—')
+      : (assignment.price!=null ? kr(assignment.price*item.quantity) : '—');
     const meta = [(item.quantity>1?item.quantity+' st':''), (item.detail||''), storeName].filter(Boolean).join(' · ');
     const candidateOptions = candidatesForItem(item, buildProductPriceIndex())
       .filter((c,idx,arr)=>arr.findIndex(x=>x.storeId===c.storeId)===idx)
@@ -2210,11 +2281,17 @@ function viewList(){
         <option value="">Byt butik…</option>${candidateOptions}
       </select>` : '';
     const resetBtn = item.manualStoreOverride ? `<button onclick="resetToRecommended('${item.id}')" title="Återställ till rekommenderad butik" style="flex:none;border:none;background:none;color:#8A5A2B;font-size:11px;font-weight:700;cursor:pointer;">↺</button>` : '';
+    // Once checked off, the price shown becomes the verified actualPrice (what
+    // was really paid) rather than the pre-purchase estimate -- ✏️ lets you
+    // correct it if it differed, since this number feeds real matkostnad/
+    // savings stats (see loadHouseholdSpendStats), not just this list's total.
+    const editPriceBtn = item.checked ? `<button onclick="editActualPrice('${item.id}')" title="Ändra pris du betalade" style="flex:none;border:none;background:none;color:#8A7E6E;font-size:12px;cursor:pointer;">✏️</button>` : '';
     return `<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;flex-wrap:wrap;">
         <button onclick="toggleItem('${item.id}')" style="${checkStyle}">${item.checked?'✓':''}</button>
         <div style="flex:1;min-width:120px;"><div style="${nameStyle}">${esc(item.product)}</div><div style="font-size:11.5px;color:#8A7E6E;margin-top:1px;">${esc(meta)}</div></div>
         ${switcher}${resetBtn}
         <span style="font-weight:800;font-size:14px;font-family:${DISP};color:#2A211A;">${priceStr}</span>
+        ${editPriceBtn}
         <button onclick="removeItem('${item.id}')" style="width:26px;height:26px;border-radius:9px;border:none;background:#F4EDE1;color:#A89A88;font-size:12px;cursor:pointer;flex:none;">✕</button>
       </div>`;
   }
@@ -2521,7 +2598,8 @@ async function addMenuToShoppingList(){
     const detail = m.parts.filter(Boolean).join(' + ');
     if(m.store && !listStores.some(s=>s.storeId===m.store)) await addListStore(m.store);
     const item = { id:itemId, product:m.name, detail, category:'Skafferivaror', emoji:'🛒', quantity:1, unit:'st',
-      dealId:m.dealId, preferredStoreId:m.store, recommendedStoreId:m.store, manualStoreOverride:null, estimatedPrice:m.price, checked:false, source:'recipe' };
+      dealId:m.dealId, preferredStoreId:m.store, recommendedStoreId:m.store, manualStoreOverride:null, estimatedPrice:m.price,
+      estimatedOrigPrice:null, actualPrice:null, checkedAt:null, checked:false, source:'recipe' };
     listItems.push(item); addedCount++;
     try{ await supa.insert('shopping_list_items', { id:itemId, list_id:currentListId, product:item.product, detail, category:'Skafferivaror', emoji:'🛒',
       quantity:1, unit:'st', deal_id:m.dealId, preferred_store_id:m.store, recommended_store_id:m.store, estimated_price:m.price, is_checked:false, source:'recipe', added_by:session.user.id }); }catch(e){}
